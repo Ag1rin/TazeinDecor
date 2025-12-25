@@ -53,6 +53,28 @@ class PersianNumber {
     final formatter = NumberFormat('#,###');
     return toPersian(formatter.format(number));
   }
+
+  /// Formats a double number to a string and converts to Persian digits.
+  /// [decimalDigits] determines the number of decimal places.
+  /// If not specified, uses `toString()` for minimal decimals.
+  /// Examples:
+  /// formatDecimal(12.0) -> "۱۲"
+  /// formatDecimal(12.5) -> "۱۲.۵"
+  /// formatDecimal(12.567, decimalDigits: 2) -> "۱۲.۵۷"
+  /// formatDecimal(12.001, decimalDigits: 2) -> "۱۲.۰۰"
+  static String formatDecimal(double number, {int? decimalDigits}) {
+    String englishNumberString;
+    if (decimalDigits != null) {
+      englishNumberString = number.toStringAsFixed(decimalDigits);
+    } else {
+      englishNumberString = number.toString();
+      // Remove trailing ".0" if it's an integer to keep it clean, e.g., "12.0" becomes "12"
+      if (englishNumberString.endsWith('.0')) {
+        englishNumberString = englishNumberString.substring(0, englishNumberString.length - 2);
+      }
+    }
+    return toPersian(englishNumberString);
+  }
   
   static String formatNumberString(String numberStr) {
     try {

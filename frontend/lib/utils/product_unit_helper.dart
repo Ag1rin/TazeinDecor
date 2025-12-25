@@ -1,4 +1,6 @@
 /// Utility to determine product unit based on category and calculator data
+import 'package:frontend/utils/persian_number.dart';
+
 class ProductUnitHelper {
   /// Determine if product is in parquet/flooring category
   /// Categories: پارکت, پارکت لمینت, کفپوش
@@ -78,33 +80,26 @@ class ProductUnitHelper {
     double? lengthCoverage,
     String? categoryName,
   }) {
-    final quantityStr = quantity.toStringAsFixed(0).split('.')[0];
-    final formattedQuantity = _formatPersianNumber(quantityStr);
+    // Use PersianNumber.formatDecimal for quantities, allowing decimals and removing trailing zeros if integer
+    final formattedQuantity = PersianNumber.formatDecimal(quantity);
     
     String coverageStr = '';
     if (isParquetCategory(categoryName) || isWallpaperCategory(categoryName)) {
       // Show area coverage for parquet and wallpaper
       if (areaCoverage != null && areaCoverage > 0) {
-        final areaStr = areaCoverage.toStringAsFixed(0).split('.')[0];
-        coverageStr = ' - متراژ کل: ${_formatPersianNumber(areaStr)} متر مربع';
+        // Format area coverage with 2 decimal places, removing trailing .00 if integer
+        final formattedArea = PersianNumber.formatDecimal(areaCoverage, decimalDigits: 2);
+        coverageStr = ' - متراژ کل: $formattedArea متر مربع';
       }
     } else if (isParquetToolsCategory(categoryName)) {
       // Show length coverage for tools/skirting
       if (lengthCoverage != null && lengthCoverage > 0) {
-        final lengthStr = lengthCoverage.toStringAsFixed(0).split('.')[0];
-        coverageStr = ' - پوشش ${_formatPersianNumber(lengthStr)} متر طول';
+        // Format length coverage with 2 decimal places, removing trailing .00 if integer
+        final formattedLength = PersianNumber.formatDecimal(lengthCoverage, decimalDigits: 2);
+        coverageStr = ' - پوشش $formattedLength متر طول';
       }
     }
 
     return '$formattedQuantity $unit$coverageStr';
-  }
-
-  /// Format number to Persian digits
-  static String _formatPersianNumber(String number) {
-    const persianDigits = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'];
-    return number.split('').map((digit) {
-      final intDigit = int.tryParse(digit);
-      return intDigit != null ? persianDigits[intDigit] : digit;
-    }).join();
   }
 }
