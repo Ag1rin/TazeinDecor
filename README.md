@@ -193,6 +193,7 @@ You can create test users via the API or directly in the database. Default roles
 ## License
 
 This project is proprietary software for TazeinDecor.
+agirin.mohammadi@gmail.com
 
 ## Support
 
