@@ -196,6 +196,6 @@ This project is proprietary software for TazeinDecor.
 
 ## Support
 
-For issues and questions, please contact the development team.
+For issues and questions, please contact me.
 
 agirin.mohammadi@gmail.com
