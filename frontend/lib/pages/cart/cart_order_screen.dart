@@ -588,14 +588,15 @@ class _CartOrderScreenState extends State<CartOrderScreen> {
                       return _buildCartItem(index, item, cartProvider);
                     }),
                     const Divider(),
-                    // Total - Only show if at least one item has cooperation price
+                    const SizedBox(height: 16),
+                    // Total Payable Amount - Prominently displayed
                     if (cartProvider.items.any(
                       (item) => item.product.colleaguePrice != null,
                     ))
                       Consumer<AuthProvider>(
                         builder: (context, authProvider, _) {
                           final user = authProvider.user;
-                          // Calculate total with discounts applied
+                          // Calculate total with discounts applied (same calculation as backend)
                           final total = cartProvider.items.fold<double>(
                             0.0,
                             (sum, item) {
@@ -610,44 +611,77 @@ class _CartOrderScreenState extends State<CartOrderScreen> {
                             },
                           );
                           
-                          return Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              const Text(
-                                'جمع کل:',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                ),
+                          return Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: AppColors.primaryBlue.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: AppColors.primaryBlue,
+                                width: 2,
                               ),
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.end,
-                                children: [
-                                  Text(
-                                    '${PersianNumber.formatPrice(total)} تومان',
-                                    style: const TextStyle(
-                                      fontSize: 20,
-                                      fontWeight: FontWeight.bold,
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Row(
+                                  children: [
+                                    Icon(
+                                      Icons.receipt_long,
                                       color: AppColors.primaryBlue,
+                                      size: 28,
                                     ),
-                                  ),
-                                  if (user?.discountPercentage != null && user!.discountPercentage! > 0) ...[
-                                    const SizedBox(height: 2),
+                                    SizedBox(width: 8),
                                     Text(
-                                      '${user.discountPercentage!.toStringAsFixed(0)}% تخفیف اعمال شده',
+                                      'مبلغ قابل پرداخت:',
                                       style: TextStyle(
-                                        fontSize: 12,
-                                        color: Colors.green[700],
-                                        fontWeight: FontWeight.w500,
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                        color: AppColors.primaryBlue,
                                       ),
                                     ),
                                   ],
-                                ],
-                              ),
-                            ],
+                                ),
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: [
+                                    Text(
+                                      '${PersianNumber.formatPrice(total)} تومان',
+                                      style: const TextStyle(
+                                        fontSize: 24,
+                                        fontWeight: FontWeight.bold,
+                                        color: AppColors.primaryBlue,
+                                      ),
+                                    ),
+                                    if (user?.discountPercentage != null && user!.discountPercentage! > 0) ...[
+                                      const SizedBox(height: 4),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 4,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: Colors.green.withOpacity(0.1),
+                                          borderRadius: BorderRadius.circular(6),
+                                        ),
+                                        child: Text(
+                                          '${user.discountPercentage!.toStringAsFixed(0)}% تخفیف اعمال شده',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.green[700],
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ],
+                            ),
                           );
                         },
                       ),
+                    const SizedBox(height: 16),
                     const SizedBox(height: 24),
                     // Customer info
                     const Text(

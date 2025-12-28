@@ -18,6 +18,7 @@ import '../../pages/returns/return_request_screen.dart';
 import 'invoice_edit_screen.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:cross_file/cross_file.dart';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -257,17 +258,36 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
       final file = File('${tempDir.path}/$fileName');
       await file.writeAsBytes(pdfBytes);
 
+      // Verify file was created
+      if (!await file.exists()) {
+        throw Exception('فایل PDF ایجاد نشد');
+      }
+
       // Share the file
       final shareText = brandName == '__ALL__'
           ? 'فاکتور ${widget.invoice.effectiveInvoiceNumber}'
           : 'فاکتور ${widget.invoice.effectiveInvoiceNumber} - $brandName';
 
-      await Share.shareXFiles([XFile(file.path)], text: shareText);
+      // Share the file - this will open the system share dialog
+      await Share.shareXFiles(
+        [XFile(file.path)],
+        text: shareText,
+      );
+      
+      // Note: Share.shareXFiles doesn't return a result in all versions
+      // The file is successfully created and shared if no exception is thrown
     } catch (e) {
+      print('❌ PDF generation error: $e');
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('خطا در تولید PDF: $e')));
+        ).showSnackBar(
+          SnackBar(
+            content: Text('خطا در تولید PDF: ${e.toString()}'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+          ),
+        );
       }
     } finally {
       if (mounted) {
