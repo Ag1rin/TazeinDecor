@@ -363,8 +363,27 @@ class _AddUserDialogState extends State<AddUserDialog> {
     });
     final productService = ProductService();
     final categories = await productService.getCategories();
+    
+    // Categories to explicitly exclude (Parkett Tools / ابزارهای پارکت)
+    final excludedCategoryNames = [
+      'ابزار پارکت',
+      'ابزارهای پارکت',
+      'ابزار های پارکت',
+      'parkett tools',
+      'parquet tools',
+    ];
+    
+    // Filter out excluded categories
+    final filteredCategories = categories.where((cat) {
+      return !excludedCategoryNames.any(
+        (excluded) =>
+            cat.name.toLowerCase().contains(excluded.toLowerCase()) ||
+            excluded.toLowerCase().contains(cat.name.toLowerCase()),
+      );
+    }).toList();
+    
     setState(() {
-      _categories = categories;
+      _categories = filteredCategories;
       _isLoadingCategories = false;
     });
   }
@@ -868,9 +887,28 @@ class _EditUserDialogState extends State<EditUserDialog> {
 
     try {
       final categories = await _productService.getCategories();
+      
+      // Categories to explicitly exclude (Parkett Tools / ابزارهای پارکت)
+      final excludedCategoryNames = [
+        'ابزار پارکت',
+        'ابزارهای پارکت',
+        'ابزار های پارکت',
+        'parkett tools',
+        'parquet tools',
+      ];
+      
+      // Filter out excluded categories
+      final filteredCategories = categories.where((cat) {
+        return !excludedCategoryNames.any(
+          (excluded) =>
+              cat.name.toLowerCase().contains(excluded.toLowerCase()) ||
+              excluded.toLowerCase().contains(cat.name.toLowerCase()),
+        );
+      }).toList();
+      
       if (mounted) {
         setState(() {
-          _categories = categories;
+          _categories = filteredCategories;
           _isLoadingCategories = false;
         });
       }

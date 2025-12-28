@@ -145,10 +145,28 @@ class _ProductsHomeState extends State<ProductsHome> {
       'کفپوش pvc',
     ];
     
+    // Categories to explicitly exclude (Parkett Tools / ابزارهای پارکت)
+    final excludedCategoryNames = [
+      'ابزار پارکت',
+      'ابزارهای پارکت',
+      'ابزار های پارکت',
+      'parkett tools',
+      'parquet tools',
+    ];
+    
     // Always include category ID 80 (Cornice and Tools / قرنیز و ابزار)
     final allowedCategoryIds = [80];
     
     var filteredCategories = categories.where((cat) {
+      // Exclude if category name matches excluded names
+      if (excludedCategoryNames.any(
+        (excluded) =>
+            cat.name.toLowerCase().contains(excluded.toLowerCase()) ||
+            excluded.toLowerCase().contains(cat.name.toLowerCase()),
+      )) {
+        return false;
+      }
+      
       // Include if ID is in allowed list OR name matches allowed names
       if (allowedCategoryIds.contains(cat.id)) {
         return true;

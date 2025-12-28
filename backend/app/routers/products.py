@@ -92,11 +92,26 @@ async def get_categories(
         # Always include category ID 80 (Cornice and Tools / قرنیز و ابزار)
         allowed_category_ids = [80]
         
-        # Filter categories by name or ID
+        # Categories to explicitly exclude (Parkett Tools / ابزارهای پارکت)
+        excluded_category_names = [
+            "ابزار پارکت",
+            "ابزارهای پارکت",
+            "ابزار های پارکت",
+            "parkett tools",
+            "parquet tools"
+        ]
+        
+        # Filter categories by name or ID, excluding unwanted categories
         filtered_categories = []
         for cat in woo_categories:
             cat_id = cat.get("id")
             cat_name = cat.get("name", "").strip()
+            
+            # Skip if category name matches excluded names
+            if any(excluded_name.lower() in cat_name.lower() or cat_name.lower() in excluded_name.lower() 
+                   for excluded_name in excluded_category_names):
+                print(f"  ✗ Excluded category: {cat_name} (ID: {cat_id})")
+                continue
             
             # Include if ID is in allowed list OR name matches allowed names
             if cat_id in allowed_category_ids:
@@ -174,10 +189,28 @@ async def get_category_by_id(
                 "کفپوش pvc"
             ]
             
+            # Categories to explicitly exclude (Parkett Tools / ابزارهای پارکت)
+            excluded_category_names = [
+                "ابزار پارکت",
+                "ابزارهای پارکت",
+                "ابزار های پارکت",
+                "parkett tools",
+                "parquet tools"
+            ]
+            
             category_found = False
             for cat in woo_categories:
                 if cat.get("id") == category_id:
                     cat_name = cat.get("name", "").strip()
+                    
+                    # Check if category is excluded
+                    if any(excluded_name.lower() in cat_name.lower() or cat_name.lower() in excluded_name.lower() 
+                           for excluded_name in excluded_category_names):
+                        raise HTTPException(
+                            status_code=404,
+                            detail=f"دسته‌بندی {category_id} (ابزارهای پارکت) از دسترس خارج شده است"
+                        )
+                    
                     if any(allowed_name.lower() in cat_name.lower() or cat_name.lower() in allowed_name.lower() 
                            for allowed_name in allowed_category_names):
                         category_found = True
@@ -419,6 +452,15 @@ async def get_products(
         # Always include category ID 80 (Cornice and Tools / قرنیز و ابزار)
         allowed_category_ids = [80]
         
+        # Categories to explicitly exclude (Parkett Tools / ابزارهای پارکت)
+        excluded_category_names = [
+            "ابزار پارکت",
+            "ابزارهای پارکت",
+            "ابزار های پارکت",
+            "parkett tools",
+            "parquet tools"
+        ]
+        
         # Get allowed category IDs from WooCommerce
         woo_categories = woocommerce_client.get_all_categories()
         category_name_to_id = {}  # Map for debugging
@@ -426,6 +468,12 @@ async def get_products(
             cat_name = cat.get("name", "").strip()
             cat_id = cat.get("id")
             category_name_to_id[cat_name] = cat_id
+            
+            # Skip if category name matches excluded names
+            if any(excluded_name.lower() in cat_name.lower() or cat_name.lower() in excluded_name.lower() 
+                   for excluded_name in excluded_category_names):
+                print(f"  ✗ Excluded category: {cat_name} (ID: {cat_id})")
+                continue
             
             # Add to allowed list if ID matches or name matches
             if cat_id in allowed_category_ids:
@@ -447,10 +495,21 @@ async def get_products(
             # Always allow category ID 80 (Cornice and Tools / قرنیز و ابزار)
             if category_id == 80:
                 print(f"✅ Category 80 (قرنیز و ابزار) is always allowed")
-            # Validate category is allowed
-            elif category_id not in allowed_category_ids:
-                print(f"⚠️  Category {category_id} is not in allowed list. Allowed IDs: {allowed_category_ids}")
-                return []
+            else:
+                # Check if category is excluded (Parkett Tools / ابزارهای پارکت)
+                for cat in woo_categories:
+                    if cat.get("id") == category_id:
+                        cat_name = cat.get("name", "").strip()
+                        if any(excluded_name.lower() in cat_name.lower() or cat_name.lower() in excluded_name.lower() 
+                               for excluded_name in excluded_category_names):
+                            print(f"⚠️  Category {category_id} ({cat_name}) is excluded (Parkett Tools)")
+                            return []
+                        break
+                
+                # Validate category is allowed
+                if category_id not in allowed_category_ids:
+                    print(f"⚠️  Category {category_id} is not in allowed list. Allowed IDs: {allowed_category_ids}")
+                    return []
             
             # For category views, fetch ALL products (no pagination) sorted by date descending (newest first)
             print(f"🔄 Fetching ALL products from WooCommerce for category {category_id} (sorted newest first)...")
