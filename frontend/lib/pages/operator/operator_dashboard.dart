@@ -447,14 +447,7 @@ class _OperatorDashboardState extends State<OperatorDashboard>
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    '${PersianNumber.formatPrice(OrderTotalCalculator.calculateGrandTotal(order))} تومان',
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.primaryBlue,
-                    ),
-                  ),
+                 
                   Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 12,

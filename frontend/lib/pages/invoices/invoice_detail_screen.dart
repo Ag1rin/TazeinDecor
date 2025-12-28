@@ -938,11 +938,15 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
       print(
         '🔍 PostFrameCallback - Loading product details for ${widget.invoice.items.length} items',
       );
+      if (widget.invoice.items.isEmpty) {
+        print('   ⚠️  No items in widget.invoice, will load after _loadInvoiceData completes');
+        return;
+      }
       for (final item in widget.invoice.items) {
         print('   - Loading details for product ${item.productId}');
         // Always load product details from secure API to get colleague_price and complete product information
-          _loadProductDetails(item.productId, item.variationId);
-        }
+        _loadProductDetails(item.productId, item.variationId);
+      }
     });
   }
 
@@ -1020,10 +1024,12 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
 
         // Always load product details for all items from original invoice
         // This ensures we fetch colleague_price, brand, SKU, image from secure API
+        // Use itemsToUse (which may be from updatedInvoice or widget.invoice)
         print(
-          '   🔄 Loading product details for ${widget.invoice.items.length} items from original invoice',
+          '   🔄 Loading product details for ${itemsToUse.length} items',
         );
-        for (final item in widget.invoice.items) {
+        for (final item in itemsToUse) {
+          print('   - Loading details for product ${item.productId}');
           _loadProductDetails(item.productId, item.variationId);
         }
       } else {
@@ -1266,6 +1272,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
 
     // Get wholesale/cooperation price (colleague_price) from secure API
     // Safely convert to double (handles both num and String types)
+    // Also try to get from item.product.colleaguePrice as fallback
     double? colleaguePrice;
     if (productDetails?['colleague_price'] != null) {
       final value = productDetails!['colleague_price'];
@@ -1274,6 +1281,12 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
       } else if (value is String) {
         colleaguePrice = double.tryParse(value);
       }
+    } else if (item.product?.colleaguePrice != null) {
+      // Fallback to item.product.colleaguePrice if not in cache yet
+      colleaguePrice = item.product!.colleaguePrice;
+    } else if (item.price > 0) {
+      // Final fallback: use item.price (which should be cooperation price from backend)
+      colleaguePrice = item.price;
     }
 
     final quantity = item.quantity;

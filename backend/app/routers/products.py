@@ -876,11 +876,12 @@ async def update_product_stock(
 @router.get("/{product_id}/colleague-price")
 async def get_colleague_price(
     product_id: int,
-    current_user: User = Depends(require_seller_or_store_manager)
+    current_user: User = Depends(get_current_user)
 ):
-    """Get colleague_price from secure API midia (Seller/Store Manager only)
+    """Get colleague_price from secure API midia (All authenticated users)
     
     This endpoint proxies the request to the secure API to avoid CORS/ORB issues.
+    Available for Seller, Store Manager, Operator, and Admin.
     """
     try:
         api_url = f"{settings.WOOCOMMERCE_URL}/wp-json/hooshmate/v1/product/{product_id}"
