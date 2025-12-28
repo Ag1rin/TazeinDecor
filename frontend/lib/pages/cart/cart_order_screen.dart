@@ -7,7 +7,7 @@ import '../../providers/auth_provider.dart';
 import '../../services/order_service.dart';
 import '../../utils/app_colors.dart';
 import '../../utils/persian_number.dart';
-import '../../utils/product_unit_helper.dart';
+import '../../utils/product_unit_display_helper.dart';
 import '../../services/product_service.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:fluttertoast/fluttertoast.dart';
@@ -958,71 +958,9 @@ class _CartOrderScreenState extends State<CartOrderScreen> {
                     builder: (context) {
                       final productDetails =
                           _productDetailsCache[item.product.id];
-                      String? categoryName;
-                      if (productDetails != null) {
-                        categoryName =
-                            productDetails['category_name']?.toString() ??
-                            productDetails['category']?.toString();
-                      }
-
-                      // Get calculator data
-                      final calculator =
-                          productDetails?['calculator']
-                              as Map<String, dynamic>?;
-                      final calculatorUnit =
-                          calculator?['unit']?.toString() ??
-                          calculator?['method']?.toString();
-
-                      // Determine unit
-                      final unit = ProductUnitHelper.getDisplayUnit(
-                        categoryName: categoryName,
-                        calculatorUnit: calculatorUnit,
-                        hasRollDimensions:
-                            calculator?['roll_w'] != null ||
-                            calculator?['roll_width'] != null,
-                        hasPackageCoverage:
-                            calculator?['pkg_cov'] != null ||
-                            calculator?['package_coverage'] != null,
-                        hasBranchLength:
-                            calculator?['branch_l'] != null ||
-                            calculator?['branch_length'] != null,
-                      );
-
-                      // Calculate area coverage
-                      double? areaCoverage;
-                      if (calculator != null) {
-                        if (ProductUnitHelper.isParquetCategory(categoryName) ||
-                            ProductUnitHelper.isWallpaperCategory(
-                              categoryName,
-                            )) {
-                          final packageCoverage =
-                              calculator['pkg_cov'] ??
-                              calculator['package_coverage'] ??
-                              calculator['params']?['pkg_cov'];
-                          if (packageCoverage != null) {
-                            areaCoverage =
-                                item.quantity *
-                                (packageCoverage as num).toDouble();
-                          } else if (ProductUnitHelper.isWallpaperCategory(
-                            categoryName,
-                          )) {
-                            final rollW =
-                                calculator['roll_w'] ??
-                                calculator['roll_width'] ??
-                                calculator['params']?['roll_w'];
-                            final rollL =
-                                calculator['roll_l'] ??
-                                calculator['roll_length'] ??
-                                calculator['params']?['roll_l'];
-                            if (rollW != null && rollL != null) {
-                              final rollArea =
-                                  (rollW as num).toDouble() *
-                                  (rollL as num).toDouble();
-                              areaCoverage = item.quantity * rollArea;
-                            }
-                          }
-                        }
-                      }
+                      
+                      // Get unit directly from secure API response
+                      final unit = ProductUnitDisplayHelper.getUnitFromAPI(productDetails);
 
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1044,11 +982,10 @@ class _CartOrderScreenState extends State<CartOrderScreen> {
                                 },
                               ),
                               Text(
-                                ProductUnitHelper.formatQuantityWithCoverage(
+                                ProductUnitDisplayHelper.formatQuantityWithCoverage(
                                   quantity: item.quantity,
                                   unit: unit,
-                                  areaCoverage: areaCoverage,
-                                  categoryName: categoryName,
+                                  productDetails: productDetails,
                                 ),
                                 style: const TextStyle(fontSize: 16),
                               ),

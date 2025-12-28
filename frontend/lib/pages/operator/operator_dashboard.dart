@@ -10,7 +10,7 @@ import '../../models/order_model.dart';
 import '../../utils/app_colors.dart';
 import '../../utils/persian_number.dart';
 import '../../utils/persian_date.dart';
-import '../../utils/product_unit_helper.dart';
+import '../../utils/product_unit_display_helper.dart';
 import '../../utils/status_labels.dart';
 import '../../pages/invoices/invoice_detail_screen.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
@@ -809,55 +809,9 @@ class _OperatorDashboardState extends State<OperatorDashboard>
     }
 
     final quantity = itemData['quantity'] ?? 0;
-    // Determine unit based on category and calculator data
-    String? categoryName =
-        productDetails?['category_name']?.toString() ??
-        productDetails?['category']?.toString();
-    final calculator = productDetails?['calculator'] as Map<String, dynamic>?;
-    final calculatorUnit =
-        calculator?['unit']?.toString() ?? calculator?['method']?.toString();
-
-    final unit = ProductUnitHelper.getDisplayUnit(
-      categoryName: categoryName,
-      calculatorUnit: calculatorUnit,
-      hasRollDimensions:
-          calculator?['roll_w'] != null || calculator?['roll_width'] != null,
-      hasPackageCoverage:
-          calculator?['pkg_cov'] != null ||
-          calculator?['package_coverage'] != null,
-      hasBranchLength:
-          calculator?['branch_l'] != null ||
-          calculator?['branch_length'] != null,
-    );
-
-    // Calculate area coverage
-    double? areaCoverage;
-    if (calculator != null) {
-      if (ProductUnitHelper.isParquetCategory(categoryName) ||
-          ProductUnitHelper.isWallpaperCategory(categoryName)) {
-        final packageCoverage =
-            calculator['pkg_cov'] ??
-            calculator['package_coverage'] ??
-            calculator['params']?['pkg_cov'];
-        if (packageCoverage != null) {
-          areaCoverage = quantity * (packageCoverage as num).toDouble();
-        } else if (ProductUnitHelper.isWallpaperCategory(categoryName)) {
-          final rollW =
-              calculator['roll_w'] ??
-              calculator['roll_width'] ??
-              calculator['params']?['roll_w'];
-          final rollL =
-              calculator['roll_l'] ??
-              calculator['roll_length'] ??
-              calculator['params']?['roll_l'];
-          if (rollW != null && rollL != null) {
-            final rollArea =
-                (rollW as num).toDouble() * (rollL as num).toDouble();
-            areaCoverage = quantity * rollArea;
-          }
-        }
-      }
-    }
+    
+    // Get unit directly from secure API response
+    final unit = ProductUnitDisplayHelper.getUnitFromAPI(productDetails);
 
     final productName =
         productDetails?['name']?.toString() ?? 'محصول ${productId ?? 'نامشخص'}';
@@ -994,7 +948,7 @@ class _OperatorDashboardState extends State<OperatorDashboard>
                   ],
                   const SizedBox(height: 4),
                   Text(
-                    'تعداد: ${ProductUnitHelper.formatQuantityWithCoverage(quantity: quantity, unit: unit, areaCoverage: areaCoverage, categoryName: categoryName)}',
+                    'تعداد: ${ProductUnitDisplayHelper.formatQuantityWithCoverage(quantity: quantity, unit: unit, productDetails: productDetails)}',
                     style: TextStyle(fontSize: 13, color: Colors.grey[700]),
                   ),
                 ],
@@ -1153,6 +1107,7 @@ class _OperatorDashboardState extends State<OperatorDashboard>
     }
   }
 
+  // ignore: unused_element
   void _showOrderDetails(OrderModel order) {
     showDialog(
       context: context,

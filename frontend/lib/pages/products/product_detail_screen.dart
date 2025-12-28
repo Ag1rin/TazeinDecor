@@ -9,7 +9,7 @@ import '../../models/product_model.dart';
 import '../../services/product_service.dart';
 import '../../utils/app_colors.dart';
 import '../../utils/persian_number.dart';
-import '../../utils/product_unit_helper.dart';
+import '../../utils/product_unit_display_helper.dart';
 import '../../widgets/product_calculator_widget.dart';
 import '../../widgets/smart_quantity_calculator.dart';
 import '../../widgets/image_viewer.dart';
@@ -573,65 +573,18 @@ class _ProductDetailScreenState extends State<ProductDetailScreen>
           // Quantity with area coverage
           Builder(
             builder: (context) {
-              // Get category from secure product data
-              String? categoryName;
-              if (_secureProductData != null) {
-                categoryName =
-                    _secureProductData!['category_name']?.toString() ??
-                    _secureProductData!['category']?.toString();
-              }
-
-              // Get calculator data
-              final calculator = _calculator;
-              String? unit;
-              double? areaCoverage;
-
-              if (calculator != null) {
-                // Determine unit based on category
-                unit = ProductUnitHelper.getDisplayUnit(
-                  categoryName: categoryName,
-                  calculatorUnit: calculator.unit ?? calculator.detectedUnit,
-                  hasRollDimensions:
-                      calculator.rollWidth != null &&
-                      calculator.rollLength != null,
-                  hasPackageCoverage:
-                      calculator.packageCoverage != null ||
-                      calculator.packageArea != null,
-                  hasBranchLength: calculator.branchLength != null,
-                );
-
-                // Calculate area coverage
-                if (ProductUnitHelper.isParquetCategory(categoryName) ||
-                    ProductUnitHelper.isWallpaperCategory(categoryName)) {
-                  if (calculator.packageCoverage != null) {
-                    areaCoverage = _quantity * calculator.packageCoverage!;
-                  } else if (calculator.packageArea != null) {
-                    areaCoverage = _quantity * calculator.packageArea!;
-                  } else if (ProductUnitHelper.isWallpaperCategory(
-                        categoryName,
-                      ) &&
-                      calculator.rollWidth != null &&
-                      calculator.rollLength != null) {
-                    final rollArea =
-                        calculator.rollWidth! * calculator.rollLength!;
-                    areaCoverage = _quantity * rollArea;
-                  }
-                }
-              } else {
-                // Fallback unit
-                unit = 'بسته';
-              }
+              // Get unit directly from secure API response
+              final unit = ProductUnitDisplayHelper.getUnitFromAPI(_secureProductData);
 
               return Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text('تعداد:'),
               Text(
-                    ProductUnitHelper.formatQuantityWithCoverage(
+                    ProductUnitDisplayHelper.formatQuantityWithCoverage(
                       quantity: _quantity,
                       unit: unit,
-                      areaCoverage: areaCoverage,
-                      categoryName: categoryName,
+                      productDetails: _secureProductData,
                     ),
                 style: const TextStyle(fontWeight: FontWeight.bold),
               ),
