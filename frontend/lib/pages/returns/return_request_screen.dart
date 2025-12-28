@@ -338,6 +338,24 @@ class _ReturnRequestScreenState extends State<ReturnRequestScreen> {
           .toList();
     }
 
+    // Get cooperation price (colleague_price) from secure API
+    double? colleaguePrice;
+    if (productDetails?['colleague_price'] != null) {
+      final value = productDetails!['colleague_price'];
+      if (value is num) {
+        colleaguePrice = value.toDouble();
+      } else if (value is String) {
+        colleaguePrice = double.tryParse(value);
+      }
+    } else if (item.product?.colleaguePrice != null) {
+      colleaguePrice = item.product!.colleaguePrice;
+    }
+
+    // Get product name - prefer from cache, then from item
+    final productName = productDetails?['name']?.toString() ?? 
+                       item.product?.name ?? 
+                       'محصول';
+
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       color: isSelected ? AppColors.primaryRed.withOpacity(0.1) : null,
@@ -359,20 +377,20 @@ class _ReturnRequestScreenState extends State<ReturnRequestScreen> {
                     borderRadius: BorderRadius.circular(8),
                     child: CachedNetworkImage(
                       imageUrl: productImage,
-                      width: 80,
-                      height: 80,
+                      width: 100,
+                      height: 100,
                       fit: BoxFit.cover,
                       placeholder: (context, url) => Container(
-                        width: 80,
-                        height: 80,
+                        width: 100,
+                        height: 100,
                         color: Colors.grey[300],
                         child: const Center(
                           child: CircularProgressIndicator(strokeWidth: 2),
                         ),
                       ),
                       errorWidget: (context, url, error) => Container(
-                        width: 80,
-                        height: 80,
+                        width: 100,
+                        height: 100,
                         color: Colors.grey[300],
                         child: const Icon(Icons.image, size: 40),
                       ),
@@ -380,8 +398,8 @@ class _ReturnRequestScreenState extends State<ReturnRequestScreen> {
                   )
                 else if (isLoadingDetails)
                   Container(
-                    width: 80,
-                    height: 80,
+                    width: 100,
+                    height: 100,
                     color: Colors.grey[300],
                     child: const Center(
                       child: CircularProgressIndicator(strokeWidth: 2),
@@ -389,8 +407,8 @@ class _ReturnRequestScreenState extends State<ReturnRequestScreen> {
                   )
                 else
                   Container(
-                    width: 80,
-                    height: 80,
+                    width: 100,
+                    height: 100,
                     color: Colors.grey[300],
                     child: const Icon(Icons.image, size: 40),
                   ),
@@ -399,15 +417,54 @@ class _ReturnRequestScreenState extends State<ReturnRequestScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // Product name (full title)
                       Text(
-                        item.product?.name ?? 'محصول',
+                        productName,
                         style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
                         ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                       ),
+                      const SizedBox(height: 8),
+                      // Cooperation price / Partner price - prominently displayed
+                      if (colleaguePrice != null && colleaguePrice > 0) ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppColors.primaryBlue.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: AppColors.primaryBlue.withOpacity(0.3),
+                              width: 1,
+                            ),
+                          ),
+                          child: Text(
+                            'قیمت همکاری: ${PersianNumber.formatPrice(colleaguePrice)} تومان',
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.primaryBlue,
+                            ),
+                            overflow: TextOverflow.visible,
+                          ),
+                        ),
+                      ] else if (!isLoadingDetails) ...[
+                        // Show order price if colleague price not available
+                        Text(
+                          'قیمت: ${PersianNumber.formatPrice(item.total)} تومان',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 8),
                       if (brandName != null) ...[
-                        const SizedBox(height: 4),
                         Text(
                           'برند/آلبوم: $brandName',
                           style: TextStyle(
@@ -416,6 +473,7 @@ class _ReturnRequestScreenState extends State<ReturnRequestScreen> {
                             fontWeight: FontWeight.w500,
                           ),
                         ),
+                        const SizedBox(height: 4),
                       ],
                       if (item.variationPattern != null) ...[
                         const SizedBox(height: 4),
@@ -513,25 +571,7 @@ class _ReturnRequestScreenState extends State<ReturnRequestScreen> {
                           );
                         },
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'قیمت: ${PersianNumber.formatPrice(item.total)} تومان',
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.primaryBlue,
-                        ),
-                      ),
-                      if (item.price > 0) ...[
-                        const SizedBox(height: 2),
-                        Text(
-                          'قیمت واحد: ${PersianNumber.formatPrice(item.price)} تومان',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey[600],
-                          ),
-                        ),
-                      ],
+                      const SizedBox(height: 8),
                     ],
                   ),
                 ),
