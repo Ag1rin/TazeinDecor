@@ -7,7 +7,7 @@ import '../../providers/auth_provider.dart';
 import '../../services/order_service.dart';
 import '../../utils/app_colors.dart';
 import '../../utils/persian_number.dart';
-import '../../utils/product_unit_display_helper.dart';
+import '../../utils/product_unit_display.dart';
 import '../../services/product_service.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:fluttertoast/fluttertoast.dart';
@@ -958,9 +958,12 @@ class _CartOrderScreenState extends State<CartOrderScreen> {
                     builder: (context) {
                       final productDetails =
                           _productDetailsCache[item.product.id];
-                      
-                      // Get unit directly from secure API response
-                      final unit = ProductUnitDisplayHelper.getUnitFromAPI(productDetails);
+
+                      // Get calculator data from secure API response
+                      final calculator =
+                          productDetails?['calculator']
+                              as Map<String, dynamic>?;
+                      final apiUnit = ProductUnitDisplay.getUnitFromCalculator(calculator);
 
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -982,10 +985,10 @@ class _CartOrderScreenState extends State<CartOrderScreen> {
                                 },
                               ),
                               Text(
-                                ProductUnitDisplayHelper.formatQuantityWithCoverage(
+                                ProductUnitDisplay.formatQuantityWithCoverage(
                                   quantity: item.quantity,
-                                  unit: unit,
-                                  productDetails: productDetails,
+                                  apiUnit: apiUnit,
+                                  calculator: calculator,
                                 ),
                                 style: const TextStyle(fontSize: 16),
                               ),

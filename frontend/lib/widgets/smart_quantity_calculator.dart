@@ -695,7 +695,7 @@ class _SmartQuantityCalculatorState extends State<SmartQuantityCalculator> {
                   const Icon(Icons.square_foot, color: Colors.white, size: 20),
                   const SizedBox(width: 8),
                   Text(
-                    'متراژ کل: ${PersianNumber.formatNumberString(area.toStringAsFixed(2))} متر مربع',
+                    'مساحت: ${PersianNumber.formatNumberString(area.toStringAsFixed(2))} متر مربع',
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,

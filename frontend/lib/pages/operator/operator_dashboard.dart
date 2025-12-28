@@ -10,7 +10,7 @@ import '../../models/order_model.dart';
 import '../../utils/app_colors.dart';
 import '../../utils/persian_number.dart';
 import '../../utils/persian_date.dart';
-import '../../utils/product_unit_display_helper.dart';
+import '../../utils/product_unit_display.dart';
 import '../../utils/status_labels.dart';
 import '../../pages/invoices/invoice_detail_screen.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
@@ -809,9 +809,9 @@ class _OperatorDashboardState extends State<OperatorDashboard>
     }
 
     final quantity = itemData['quantity'] ?? 0;
-    
-    // Get unit directly from secure API response
-    final unit = ProductUnitDisplayHelper.getUnitFromAPI(productDetails);
+    // Get calculator data from secure API response
+    final calculator = productDetails?['calculator'] as Map<String, dynamic>?;
+    final apiUnit = ProductUnitDisplay.getUnitFromCalculator(calculator);
 
     final productName =
         productDetails?['name']?.toString() ?? 'محصول ${productId ?? 'نامشخص'}';
@@ -948,7 +948,7 @@ class _OperatorDashboardState extends State<OperatorDashboard>
                   ],
                   const SizedBox(height: 4),
                   Text(
-                    'تعداد: ${ProductUnitDisplayHelper.formatQuantityWithCoverage(quantity: quantity, unit: unit, productDetails: productDetails)}',
+                    'تعداد: ${ProductUnitDisplay.formatQuantityWithCoverage(quantity: quantity, apiUnit: apiUnit, calculator: calculator)}',
                     style: TextStyle(fontSize: 13, color: Colors.grey[700]),
                   ),
                 ],
