@@ -18,7 +18,83 @@ class OrderService {
     }
   }
 
+  /// Create pending order for online payment (WooCommerce only, not in local DB)
+  /// Returns order data with woo_order_id for payment processing
+  Future<Map<String, dynamic>?> createPendingOrderForPayment(
+    Map<String, dynamic> orderData,
+  ) async {
+    try {
+      final response = await _api.post('/orders/pending-payment', data: orderData);
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return response.data as Map<String, dynamic>;
+      }
+      return null;
+    } catch (e) {
+      print('❌ Error creating pending order for payment: $e');
+      if (e is DioException) {
+        final errorMessage =
+            e.response?.data?['detail'] ??
+            e.response?.data?['message'] ??
+            e.message ??
+            'خطا در ثبت سفارش';
+        print('❌ Error detail: $errorMessage');
+        throw Exception(errorMessage);
+      }
+      return null;
+    }
+  }
+
+  /// Verify payment and register order in local DB after successful payment
+  Future<OrderModel?> verifyPaymentAndRegisterOrder(
+    int wooOrderId,
+    Map<String, dynamic> orderData,
+    int customerId,
+    double totalAmount,
+    double wholesaleAmount,
+  ) async {
+    try {
+      final verifyData = {
+        'woo_order_id': wooOrderId,
+        'order_data': orderData,
+        'customer_id': customerId,
+        'total_amount': totalAmount,
+        'wholesale_amount': wholesaleAmount,
+      };
+      
+      final response = await _api.post('/orders/verify-payment', data: verifyData);
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return OrderModel.fromJson(response.data);
+      }
+      return null;
+    } catch (e) {
+      print('❌ Error verifying payment and registering order: $e');
+      if (e is DioException) {
+        final errorMessage =
+            e.response?.data?['detail'] ??
+            e.response?.data?['message'] ??
+            e.message ??
+            'خطا در تایید پرداخت';
+        print('❌ Error detail: $errorMessage');
+        throw Exception(errorMessage);
+      }
+      return null;
+    }
+  }
+
+  /// Cancel pending order if payment fails
+  Future<bool> cancelPendingOrder(int wooOrderId) async {
+    try {
+      final response = await _api.delete('/orders/pending-payment/$wooOrderId');
+      return response.statusCode == 200;
+    } catch (e) {
+      print('❌ Error cancelling pending order: $e');
+      return false;
+    }
+  }
+
   /// Create order and return raw response data (for online payment flow)
+  /// DEPRECATED: Use createPendingOrderForPayment instead
+  @Deprecated('Use createPendingOrderForPayment instead')
   Future<Map<String, dynamic>?> createOrderForPayment(
     Map<String, dynamic> orderData,
   ) async {

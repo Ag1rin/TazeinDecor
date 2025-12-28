@@ -93,7 +93,7 @@ async def login(
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Incorrect username or password"
+                detail="نام کاربری یا رمز عبور اشتباه است"
             )
         
         # Check if password hash is valid
@@ -101,19 +101,19 @@ async def login(
             print(f"Warning: User {user.username} has invalid password hash format")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Password hash is corrupted. Please contact administrator to reset your password."
+                detail="رمز عبور خراب است. لطفاً با مدیر سیستم تماس بگیرید تا رمز عبور شما بازنشانی شود."
             )
         
         if not verify_password(login_data.password, user.password_hash):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Incorrect username or password"
+                detail="نام کاربری یا رمز عبور اشتباه است"
             )
         
         if not user.is_active:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="User account is inactive"
+                detail="حساب کاربری غیرفعال است"
             )
         
         access_token = create_access_token(data={"sub": user.username})
@@ -128,7 +128,7 @@ async def login(
         print(f"Login error: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Internal server error: {str(e)}"
+            detail=f"خطای داخلی سرور: {str(e)}"
         )
 
 
@@ -149,7 +149,7 @@ async def register(
     if existing_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Username already exists"
+            detail="نام کاربری قبلاً استفاده شده است"
         )
     
     # Generate referral code for sellers
@@ -200,28 +200,28 @@ async def change_password(
     if not old_password or not new_password:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Both old_password and new_password are required"
+            detail="رمز عبور قدیمی و جدید هر دو الزامی هستند"
         )
     
     # Validate new password length
     if len(new_password) < 6:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="New password must be at least 6 characters long"
+            detail="رمز عبور جدید باید حداقل ۶ کاراکتر باشد"
         )
     
     # Verify old password
     if not verify_password(old_password, current_user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect current password"
+            detail="رمز عبور فعلی اشتباه است"
         )
     
     # Check if new password is same as old password
     if verify_password(new_password, current_user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="New password must be different from current password"
+            detail="رمز عبور جدید باید با رمز عبور فعلی متفاوت باشد"
         )
     
     try:
@@ -239,7 +239,7 @@ async def change_password(
         print(f"❌ Error changing password: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error changing password: {str(e)}"
+            detail=f"خطا در تغییر رمز عبور: {str(e)}"
         )
 
 
@@ -268,7 +268,7 @@ async def reset_admin_password_endpoint(
     if not secret_key or secret_key != expected_key:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Invalid secret key"
+            detail="کلید مخفی نامعتبر است"
         )
     
     try:
@@ -302,6 +302,6 @@ async def reset_admin_password_endpoint(
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error resetting password: {str(e)}"
+            detail=f"خطا در بازنشانی رمز عبور: {str(e)}"
         )
 

@@ -22,7 +22,7 @@ def get_current_user(
     """Get current authenticated user"""
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
+        detail="اعتبارنامه‌ها قابل تأیید نیستند",
         headers={"WWW-Authenticate": "Bearer"},
     )
     
@@ -52,7 +52,7 @@ def get_current_user(
     if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="User is inactive"
+            detail="کاربر غیرفعال است"
         )
     
     return user
@@ -64,7 +64,7 @@ def require_role(*allowed_roles: UserRole):
         if current_user.role not in allowed_roles:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Insufficient permissions"
+                detail="دسترسی کافی نیست"
             )
         return current_user
     return role_checker

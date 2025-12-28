@@ -58,7 +58,7 @@ async def update_company(
     """Update company (Operator only)"""
     company = db.query(Company).filter(Company.id == company_id).first()
     if not company:
-        raise HTTPException(status_code=404, detail="Company not found")
+        raise HTTPException(status_code=404, detail="شرکت یافت نشد")
     
     company.name = company_data.name
     company.mobile = company_data.mobile
@@ -82,7 +82,7 @@ async def upload_logo(
     """Upload company logo (Operator only)"""
     company = db.query(Company).filter(Company.id == company_id).first()
     if not company:
-        raise HTTPException(status_code=404, detail="Company not found")
+        raise HTTPException(status_code=404, detail="شرکت یافت نشد")
     
     # Use the same upload directory as configured in main.py
     # Get from environment or settings, matching main.py logic
@@ -120,7 +120,7 @@ async def upload_logo(
                 f.write(content)
             print(f"⚠️  Saved to temp directory: {file_path}")
         else:
-            raise HTTPException(status_code=500, detail=f"Failed to save file: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"خطا در ذخیره فایل: {str(e)}")
     
     company.logo = filename
     db.commit()
@@ -137,7 +137,7 @@ async def delete_company(
     """Delete company (Operator only)"""
     company = db.query(Company).filter(Company.id == company_id).first()
     if not company:
-        raise HTTPException(status_code=404, detail="Company not found")
+        raise HTTPException(status_code=404, detail="شرکت یافت نشد")
     
     db.delete(company)
     db.commit()

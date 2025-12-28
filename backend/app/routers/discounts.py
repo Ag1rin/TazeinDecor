@@ -22,19 +22,19 @@ async def create_discount(
     # Verify user exists and is a seller
     user = db.query(User).filter(User.id == discount_data.user_id).first()
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail="کاربر یافت نشد")
     
     if user.role != UserRole.SELLER:
         raise HTTPException(
             status_code=400,
-            detail="Discounts can only be set for sellers"
+            detail="تخفیف فقط برای فروشندگان قابل تنظیم است"
         )
     
     # Verify category exists if provided
     if discount_data.category_id:
         category = db.query(Category).filter(Category.id == discount_data.category_id).first()
         if not category:
-            raise HTTPException(status_code=404, detail="Category not found")
+            raise HTTPException(status_code=404, detail="دسته‌بندی یافت نشد")
     
     # Check if discount already exists for this user-category combination
     existing = db.query(Discount).filter(
@@ -96,7 +96,7 @@ async def get_user_discounts(
     """Get discounts for a specific user"""
     # Users can only see their own discounts, or Admin/Operator can see any
     if current_user.role not in [UserRole.ADMIN, UserRole.OPERATOR] and current_user.id != user_id:
-        raise HTTPException(status_code=403, detail="Access denied")
+        raise HTTPException(status_code=403, detail="دسترسی رد شد")
     
     query = db.query(Discount).filter(
         Discount.user_id == user_id,
@@ -123,7 +123,7 @@ async def update_discount(
     """Update discount (Admin/Operator only)"""
     discount = db.query(Discount).filter(Discount.id == discount_id).first()
     if not discount:
-        raise HTTPException(status_code=404, detail="Discount not found")
+        raise HTTPException(status_code=404, detail="تخفیف یافت نشد")
     
     if discount_data.category_id is not None:
         discount.category_id = discount_data.category_id
@@ -147,7 +147,7 @@ async def delete_discount(
     """Delete discount (Admin/Operator only)"""
     discount = db.query(Discount).filter(Discount.id == discount_id).first()
     if not discount:
-        raise HTTPException(status_code=404, detail="Discount not found")
+        raise HTTPException(status_code=404, detail="تخفیف یافت نشد")
     
     db.delete(discount)
     db.commit()

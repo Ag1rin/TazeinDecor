@@ -478,17 +478,38 @@ class _ReturnRequestScreenState extends State<ReturnRequestScreen> {
                               productDetails?['calculator']
                                   as Map<String, dynamic>?;
                           final apiUnit = ProductUnitDisplay.getUnitFromCalculator(calculator);
+                          final coverageStr = ProductUnitDisplay.formatCoverage(
+                            quantity: maxQuantity,
+                            apiUnit: apiUnit,
+                            calculator: calculator,
+                          );
                           
-                          return Text(
-                            'تعداد: ${ProductUnitDisplay.formatQuantityWithCoverage(
-                              quantity: maxQuantity,
-                              apiUnit: apiUnit,
-                              calculator: calculator,
-                            )}',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: Colors.grey[700],
-                            ),
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Unit row
+                              Text(
+                                'تعداد: ${ProductUnitDisplay.formatQuantityWithUnit(
+                                  quantity: maxQuantity,
+                                  apiUnit: apiUnit,
+                                )}',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.grey[700],
+                                ),
+                              ),
+                              // Coverage row (متراژ) - only show if available
+                              if (coverageStr != null && coverageStr.isNotEmpty) ...[
+                                const SizedBox(height: 4),
+                                Text(
+                                  coverageStr,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey[600],
+                                  ),
+                                ),
+                              ],
+                            ],
                           );
                         },
                       ),
@@ -501,6 +522,16 @@ class _ReturnRequestScreenState extends State<ReturnRequestScreen> {
                           color: AppColors.primaryBlue,
                         ),
                       ),
+                      if (item.price > 0) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          'قیمت واحد: ${PersianNumber.formatPrice(item.price)} تومان',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),

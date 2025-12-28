@@ -20,7 +20,7 @@ def require_seller_or_store_manager(current_user: User = Depends(get_current_use
     if current_user.role not in [UserRole.SELLER, UserRole.STORE_MANAGER]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access to products is only allowed for sellers and store managers"
+            detail="دسترسی به محصولات فقط برای فروشندگان و مدیران فروشگاه مجاز است"
         )
     return current_user
 
@@ -127,7 +127,7 @@ async def get_categories(
         traceback.print_exc()
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to fetch categories from WooCommerce: {str(e)}"
+            detail=f"خطا در دریافت دسته‌بندی‌ها از ووکامرس: {str(e)}"
         )
 
 
@@ -481,7 +481,7 @@ async def get_products(
         traceback.print_exc()
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to fetch products from WooCommerce: {str(e)}"
+            detail=f"خطا در دریافت محصولات از ووکامرس: {str(e)}"
         )
 
 
@@ -493,7 +493,7 @@ async def sync_products(
     """Sync products and categories from WooCommerce to local database (Admin only) - DEPRECATED"""
     raise HTTPException(
         status_code=404,
-        detail="Sync endpoint is no longer available. Products are fetched directly from WooCommerce."
+        detail="endpoint همگام‌سازی دیگر در دسترس نیست. محصولات مستقیماً از ووکامرس دریافت می‌شوند."
     )
     return
 
@@ -507,7 +507,7 @@ async def debug_product(
     try:
         woo_product = woocommerce_client.get_product(product_id)
         if not woo_product:
-            raise HTTPException(status_code=404, detail="Product not found in WooCommerce")
+            raise HTTPException(status_code=404, detail="محصول در ووکامرس یافت نشد")
         
         # Return raw WooCommerce data with stock info highlighted
         return {
@@ -526,7 +526,7 @@ async def debug_product(
         print(f"❌ Debug error: {e}")
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Debug error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"خطای دیباگ: {str(e)}")
 
 
 @router.get("/{product_id}", response_model=ProductResponse)
@@ -549,7 +549,7 @@ async def get_product(
         woo_product = woocommerce_client.get_product(product_id)
         
         if not woo_product:
-            raise HTTPException(status_code=404, detail="Product not found")
+            raise HTTPException(status_code=404, detail="محصول یافت نشد")
         
         # Transform WooCommerce product to ProductResponse
         transformed_product = ProductResponse(**_transform_woo_product(woo_product))
@@ -569,7 +569,7 @@ async def get_product(
         traceback.print_exc()
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to fetch product from WooCommerce: {str(e)}"
+            detail=f"خطا در دریافت محصول از ووکامرس: {str(e)}"
         )
 
 
@@ -656,7 +656,7 @@ async def get_product_variations(
         traceback.print_exc()
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to fetch variations from WooCommerce: {str(e)}"
+            detail=f"خطا در دریافت تنوع‌ها از ووکامرس: {str(e)}"
         )
 
 
@@ -676,12 +676,12 @@ async def update_product_price(
         
         response = woocommerce_client.update_product(product_id, update_data)
         if not response:
-            raise HTTPException(status_code=404, detail="Product not found in WooCommerce")
+            raise HTTPException(status_code=404, detail="محصول در ووکامرس یافت نشد")
         
         return {"message": "Price updated in WooCommerce", "product_id": product_id, "price": price}
     except Exception as e:
         print(f"❌ Error updating product price: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to update price: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"خطا در به‌روزرسانی قیمت: {str(e)}")
 
 
 @router.put("/{product_id}/stock")
@@ -701,10 +701,10 @@ async def update_product_stock(
         
         response = woocommerce_client.update_product(product_id, update_data)
         if not response:
-            raise HTTPException(status_code=404, detail="Product not found in WooCommerce")
+            raise HTTPException(status_code=404, detail="محصول در ووکامرس یافت نشد")
         
         return {"message": "Stock updated in WooCommerce", "product_id": product_id, "stock": stock}
     except Exception as e:
         print(f"❌ Error updating product stock: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to update stock: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"خطا در به‌روزرسانی موجودی: {str(e)}")
 

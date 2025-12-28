@@ -109,7 +109,7 @@ async def send_image(
                 f.write(content)
             print(f"⚠️  Saved to temp directory: {file_path}")
         else:
-            raise HTTPException(status_code=500, detail=f"Failed to save file: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"خطا در ذخیره فایل: {str(e)}")
     
     chat_message = ChatMessage(
         user_id=current_user.id,
@@ -182,7 +182,7 @@ async def send_voice(
                 f.write(content)
             print(f"⚠️  Saved to temp directory: {file_path}")
         else:
-            raise HTTPException(status_code=500, detail=f"Failed to save file: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"خطا در ذخیره فایل: {str(e)}")
     
     chat_message = ChatMessage(
         user_id=current_user.id,
@@ -254,7 +254,7 @@ async def delete_message(
     """Soft-delete message and broadcast system replacement (Admin/Operator)."""
     message = db.query(ChatMessage).filter(ChatMessage.id == message_id).first()
     if not message:
-        raise HTTPException(status_code=404, detail="Message not found")
+        raise HTTPException(status_code=404, detail="پیام یافت نشد")
 
     # Replace content with system message instead of hard delete
     message.message = "This message was deleted by an admin."

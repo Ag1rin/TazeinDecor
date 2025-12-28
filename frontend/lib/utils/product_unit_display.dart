@@ -115,22 +115,28 @@ class ProductUnitDisplay {
     return null;
   }
 
-  /// Format quantity with unit and area/length coverage
-  /// Example: "132 رول - متراژ کل: ۶۹۹ متر مربع"
-  /// Example: "50 شاخه - پوشش ۱۵۰ متر طول"
-  static String formatQuantityWithCoverage({
+  /// Format quantity with unit (without coverage)
+  /// Example: "132 رول"
+  static String formatQuantityWithUnit({
+    required double quantity,
+    required String? apiUnit,
+  }) {
+    final quantityStr = quantity.toStringAsFixed(0).split('.')[0];
+    final formattedQuantity = _formatPersianNumber(quantityStr);
+    final displayUnit = getDisplayUnit(apiUnit);
+    return '$formattedQuantity $displayUnit';
+  }
+
+  /// Format coverage string (area or length)
+  /// Example: "متراژ کل: ۶۹۹ متر مربع" or "پوشش ۱۵۰ متر طول"
+  /// Returns null if no coverage available
+  static String? formatCoverage({
     required double quantity,
     required String? apiUnit,
     Map<String, dynamic>? calculator,
   }) {
-    final quantityStr = quantity.toStringAsFixed(0).split('.')[0];
-    final formattedQuantity = _formatPersianNumber(quantityStr);
-    
-    final displayUnit = getDisplayUnit(apiUnit);
-    
-    // Calculate coverage based on unit type
     final normalized = apiUnit?.toLowerCase().trim() ?? '';
-    String coverageStr = '';
+    String? coverageStr;
     
     // For branch units, show length coverage
     if (normalized == 'branch' || normalized == 'شاخه') {
@@ -141,7 +147,7 @@ class ProductUnitDisplay {
       );
       if (lengthCoverage != null && lengthCoverage > 0) {
         final lengthStr = lengthCoverage.toStringAsFixed(0).split('.')[0];
-        coverageStr = ' - پوشش ${_formatPersianNumber(lengthStr)} متر طول';
+        coverageStr = 'پوشش ${_formatPersianNumber(lengthStr)} متر طول';
       }
     } else {
       // For other units (roll, package, tile), show area coverage
@@ -152,11 +158,37 @@ class ProductUnitDisplay {
       );
       if (areaCoverage != null && areaCoverage > 0) {
         final areaStr = areaCoverage.toStringAsFixed(0).split('.')[0];
-        coverageStr = ' - متراژ کل: ${_formatPersianNumber(areaStr)} متر مربع';
+        coverageStr = 'متراژ کل: ${_formatPersianNumber(areaStr)} متر مربع';
       }
     }
 
-    return '$formattedQuantity $displayUnit$coverageStr';
+    return coverageStr;
+  }
+
+  /// Format quantity with unit and area/length coverage
+  /// Example: "132 رول - متراژ کل: ۶۹۹ متر مربع"
+  /// Example: "50 شاخه - پوشش ۱۵۰ متر طول"
+  static String formatQuantityWithCoverage({
+    required double quantity,
+    required String? apiUnit,
+    Map<String, dynamic>? calculator,
+  }) {
+    final quantityWithUnit = formatQuantityWithUnit(
+      quantity: quantity,
+      apiUnit: apiUnit,
+    );
+    
+    final coverageStr = formatCoverage(
+      quantity: quantity,
+      apiUnit: apiUnit,
+      calculator: calculator,
+    );
+
+    if (coverageStr != null && coverageStr.isNotEmpty) {
+      return '$quantityWithUnit - $coverageStr';
+    }
+    
+    return quantityWithUnit;
   }
 
   /// Format number to Persian digits

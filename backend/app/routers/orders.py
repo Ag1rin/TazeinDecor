@@ -82,7 +82,7 @@ async def create_order(
     
     if current_user.role not in [UserRole.SELLER, UserRole.STORE_MANAGER]:
         print(f"❌ Access denied - User role {current_user.role} not in allowed roles")
-        raise HTTPException(status_code=403, detail="Only sellers and store managers can create orders")
+        raise HTTPException(status_code=403, detail="فقط فروشندگان و مدیران فروشگاه می‌توانند سفارش ایجاد کنند")
     
     print(f"✅ Access granted for user {current_user.id} with role {current_user.role}")
     
@@ -114,7 +114,7 @@ async def create_order(
         if not woo_product:
             raise HTTPException(
                 status_code=404,
-                detail=f"Product {woo_product_id} not found in WooCommerce"
+                detail=f"محصول {woo_product_id} در ووکامرس یافت نشد"
             )
         
         # Get retail price from WooCommerce product (for WooCommerce order)
@@ -232,7 +232,7 @@ async def create_order(
     if not woo_order:
         raise HTTPException(
             status_code=500,
-            detail="Failed to create order in WooCommerce"
+            detail="خطا در ایجاد سفارش در ووکامرس"
         )
     
     print(f"✅ Order created in WooCommerce: {woo_order.get('id')}")
@@ -393,6 +393,393 @@ async def create_order(
     return OrderResponse.model_validate(order_dict)
 
 
+@router.post("/pending-payment", response_model=dict)
+async def create_pending_order_for_payment(
+    order_data: OrderCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Create a pending order in WooCommerce for online payment (not saved to local DB yet)
+    
+    This order will only be saved to local DB after payment is verified as successful.
+    If payment fails, the WooCommerce order will be deleted.
+    """
+    print(f"🔍 Creating pending order for payment - User ID: {current_user.id}, Role: {current_user.role}")
+    
+    if current_user.role not in [UserRole.SELLER, UserRole.STORE_MANAGER]:
+        raise HTTPException(status_code=403, detail="فقط فروشندگان و مدیران فروشگاه می‌توانند سفارش ایجاد کنند")
+    
+    if order_data.payment_method != PaymentMethod.ONLINE:
+        raise HTTPException(status_code=400, detail="این endpoint فقط برای سفارشات پرداخت آنلاین است")
+    
+    # Find or create customer
+    customer = db.query(Customer).filter(Customer.mobile == order_data.customer_mobile).first()
+    if not customer:
+        customer = Customer(
+            name=order_data.customer_name,
+            mobile=order_data.customer_mobile,
+            address=order_data.customer_address
+        )
+        db.add(customer)
+        db.flush()
+    
+    # Calculate totals
+    total = 0.0  # Retail total (for WooCommerce)
+    wholesale_total = 0.0  # Wholesale total (actual seller payment)
+    woo_line_items = []
+    
+    for item_data in order_data.items:
+        woo_product_id = item_data.product_id
+        woo_product = woocommerce_client.get_product(woo_product_id)
+        
+        if not woo_product:
+            raise HTTPException(
+                status_code=404,
+                detail=f"محصول {woo_product_id} در ووکامرس یافت نشد"
+            )
+        
+        retail_price = float(woo_product.get('price', 0))
+        wholesale_price = float(item_data.price) if item_data.price else retail_price
+        
+        # Apply user discount if applicable
+        product_categories = woo_product.get('categories', [])
+        category_ids = [cat.get('id') for cat in product_categories] if product_categories else []
+        
+        applicable_discount = None
+        if category_ids:
+            for cat_id in category_ids:
+                discount = _get_user_discount_for_category(db, current_user.id, cat_id)
+                if discount:
+                    applicable_discount = discount
+                    break
+        
+        if not applicable_discount:
+            applicable_discount = _get_user_discount_for_category(db, current_user.id, None)
+        
+        if applicable_discount and applicable_discount.discount_percentage > 0:
+            discount_amount = wholesale_price * (applicable_discount.discount_percentage / 100.0)
+            wholesale_price = wholesale_price - discount_amount
+        
+        # Handle variation price
+        if item_data.variation_id:
+            try:
+                variation_id_int = int(item_data.variation_id)
+                variations = woocommerce_client.get_product_variations(woo_product_id)
+                variation = next((v for v in variations if v.get('id') == variation_id_int), None)
+                if variation and variation.get('price'):
+                    retail_price = float(variation.get('price', retail_price))
+            except Exception as e:
+                print(f"⚠️  Could not fetch variation price: {e}")
+        
+        retail_item_total = item_data.quantity * retail_price
+        wholesale_item_total = item_data.quantity * wholesale_price
+        total += retail_item_total
+        wholesale_total += wholesale_item_total
+        
+        # Prepare line item for WooCommerce
+        line_meta = []
+        if item_data.variation_pattern:
+            line_meta.append({"key": "pattern", "value": item_data.variation_pattern})
+
+        variation_id = None
+        if item_data.variation_id:
+            try:
+                variation_id = int(item_data.variation_id)
+            except (ValueError, TypeError):
+                variation_id = None
+        
+        woo_line_item = {
+            "product_id": woo_product_id,
+            "quantity": max(1, int(round(item_data.quantity))),
+            "subtotal": str(retail_item_total),
+            "total": str(retail_item_total),
+            "meta_data": line_meta
+        }
+        
+        if variation_id:
+            woo_line_item["variation_id"] = variation_id
+        
+        woo_line_items.append(woo_line_item)
+
+    # Create pending order in WooCommerce (status: pending, not saved to local DB)
+    billing_email = f"{order_data.customer_mobile}@example.local"
+    billing_info = {
+        "first_name": order_data.customer_name or "Customer",
+        "last_name": "",
+        "phone": order_data.customer_mobile,
+        "email": billing_email,
+        "address_1": order_data.customer_address or "",
+        "country": "IR"
+    }
+
+    woo_payload = {
+        "status": "pending",  # Pending status - will be updated after payment
+        "payment_method": "online",
+        "payment_method_title": "پرداخت آنلاین",
+        "billing": billing_info,
+        "shipping": billing_info,
+        "line_items": woo_line_items,
+        "customer_note": order_data.notes or "",
+    }
+
+    print("🔄 Creating pending order in WooCommerce...")
+    woo_order = await asyncio.to_thread(woocommerce_client.create_order, woo_payload)
+    
+    if not woo_order:
+        raise HTTPException(
+            status_code=500,
+            detail="خطا در ایجاد سفارش در انتظار در ووکامرس"
+        )
+    
+    woo_order_id = woo_order.get('id')
+    order_key = woo_order.get('order_key', '')
+    
+    print(f"✅ Pending order created in WooCommerce: {woo_order_id}")
+    
+    # Return order data for payment processing (NOT saved to local DB yet)
+    return {
+        "woo_order_id": woo_order_id,
+        "order_key": order_key,
+        "order_number": f"ORD-{datetime.now().strftime('%Y%m%d')}-{woo_order_id}",
+        "total_amount": total,
+        "wholesale_amount": wholesale_total,
+        "customer_id": customer.id,
+        "order_data": order_data.dict(),  # Store order data for later registration
+    }
+
+
+@router.post("/verify-payment", response_model=OrderResponse)
+async def verify_payment_and_register_order(
+    verify_data: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Verify payment status from WooCommerce and register order in local DB if payment successful
+    
+    Request body should contain:
+    - woo_order_id: WooCommerce order ID
+    - order_data: Original order data from create_pending_order_for_payment
+    """
+    from pydantic import BaseModel
+    from typing import Optional as TypingOptional
+    
+    class VerifyPaymentRequest(BaseModel):
+        woo_order_id: int
+        order_data: dict
+        customer_id: Optional[int] = None
+        total_amount: float = 0.0
+        wholesale_amount: float = 0.0
+    
+    try:
+        verify_req = VerifyPaymentRequest(**verify_data)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"داده‌های درخواست نامعتبر: {str(e)}")
+    
+    woo_order_id = verify_req.woo_order_id
+    original_order_data = verify_req.order_data
+    
+    print(f"🔍 Verifying payment for WooCommerce order {woo_order_id}")
+    
+    if current_user.role not in [UserRole.SELLER, UserRole.STORE_MANAGER]:
+        raise HTTPException(status_code=403, detail="فقط فروشندگان و مدیران فروشگاه می‌توانند پرداخت را تایید کنند")
+    
+    # Get order from WooCommerce
+    woo_order = await asyncio.to_thread(woocommerce_client.get_order, woo_order_id)
+    
+    if not woo_order:
+        raise HTTPException(
+            status_code=404,
+            detail=f"سفارش {woo_order_id} در ووکامرس یافت نشد"
+        )
+    
+    # Check payment status
+    woo_status = woo_order.get('status', '').lower()
+    payment_status = woo_order.get('payment_status', '').lower()
+    
+    print(f"📊 WooCommerce order status: {woo_status}, payment_status: {payment_status}")
+    
+    # Check if payment is successful
+    # WooCommerce payment statuses: 'paid', 'pending', 'failed', 'cancelled', 'refunded'
+    is_paid = (
+        payment_status == 'paid' or
+        woo_status in ['processing', 'completed'] or
+        (woo_status == 'pending' and payment_status == 'paid')
+    )
+    
+    if not is_paid:
+        raise HTTPException(
+            status_code=400,
+            detail=f"پرداخت تکمیل نشده است. وضعیت سفارش: {woo_status}، وضعیت پرداخت: {payment_status}"
+        )
+    
+    # Payment is successful - now register the order in local DB using original order data
+    order_data = OrderCreate(**original_order_data)
+    
+    # Use customer from verify request or find/create
+    customer_id = verify_req.customer_id
+    if customer_id:
+        customer = db.query(Customer).filter(Customer.id == customer_id).first()
+        if not customer:
+            raise HTTPException(status_code=404, detail=f"مشتری {customer_id} یافت نشد")
+    else:
+        # Find or create customer
+        customer = db.query(Customer).filter(Customer.mobile == order_data.customer_mobile).first()
+        if not customer:
+            customer = Customer(
+                name=order_data.customer_name,
+                mobile=order_data.customer_mobile,
+                address=order_data.customer_address
+            )
+            db.add(customer)
+            db.flush()
+    
+    # Use totals from verify request or recalculate
+    total = verify_req.total_amount if verify_req.total_amount > 0 else float(woo_order.get('total', 0))
+    wholesale_total = verify_req.wholesale_amount if verify_req.wholesale_amount > 0 else total
+    
+    order_number = f"ORD-{datetime.now().strftime('%Y%m%d')}-{woo_order_id}"
+    
+    # Check if order already exists in local DB
+    existing_order = db.query(Order).filter(Order.order_number == order_number).first()
+    if existing_order:
+        print(f"⚠️  Order {order_number} already exists in local DB")
+        order_dict = _enrich_order_with_customer(existing_order)
+        return OrderResponse.model_validate(order_dict)
+    
+    # Look up referrer by referral code if provided
+    referrer_id = None
+    if order_data.referral_code:
+        referrer = db.query(User).filter(
+            User.referral_code == order_data.referral_code.upper(),
+            User.is_active == True,
+            User.role.in_([UserRole.SELLER, UserRole.STORE_MANAGER])
+        ).first()
+        if referrer:
+            referrer_id = referrer.id
+    
+    # Create order in local DB
+    order = Order(
+        order_number=order_number,
+        seller_id=current_user.id,
+        customer_id=customer.id,
+        payment_method=PaymentMethod.ONLINE,
+        delivery_method=order_data.delivery_method,
+        installation_date=order_data.installation_date,
+        installation_notes=order_data.installation_notes,
+        notes=order_data.notes,
+        status='pending',
+        is_new=True,
+        total_amount=total,
+        wholesale_amount=wholesale_total,
+        referrer_id=referrer_id
+    )
+    
+    db.add(order)
+    db.flush()
+    
+    # Auto-create installation entry if installation_date is provided
+    if order_data.installation_date:
+        from app.models import Installation
+        installation = Installation(
+            order_id=order.id,
+            installation_date=order_data.installation_date,
+            notes=order_data.installation_notes,
+            color=None
+        )
+        db.add(installation)
+    
+    # Create order items from original order data (to preserve wholesale prices)
+    for item_data in order_data.items:
+        # Get retail price from WooCommerce for reference
+        woo_product = woocommerce_client.get_product(item_data.product_id)
+        retail_price = float(woo_product.get('price', 0)) if woo_product else 0
+        
+        # Use wholesale price from original order data
+        wholesale_price = float(item_data.price) if item_data.price else retail_price
+        
+        # Apply discount if needed (same logic as in create_order)
+        if woo_product:
+            product_categories = woo_product.get('categories', [])
+            category_ids = [cat.get('id') for cat in product_categories] if product_categories else []
+            
+            applicable_discount = None
+            if category_ids:
+                for cat_id in category_ids:
+                    discount = _get_user_discount_for_category(db, current_user.id, cat_id)
+                    if discount:
+                        applicable_discount = discount
+                        break
+            
+            if not applicable_discount:
+                applicable_discount = _get_user_discount_for_category(db, current_user.id, None)
+            
+            if applicable_discount and applicable_discount.discount_percentage > 0:
+                discount_amount = wholesale_price * (applicable_discount.discount_percentage / 100.0)
+                wholesale_price = wholesale_price - discount_amount
+        
+        unit_price = wholesale_price
+        item_total = item_data.quantity * wholesale_price
+        
+        order_item = OrderItem(
+            order_id=order.id,
+            product_id=item_data.product_id,
+            quantity=item_data.quantity,
+            unit=item_data.unit,
+            price=unit_price,
+            total=item_total,
+            variation_id=item_data.variation_id,
+            variation_pattern=item_data.variation_pattern
+        )
+        db.add(order_item)
+    
+    try:
+        db.commit()
+        db.refresh(order)
+        print(f"✅ Order {order_number} registered in local DB after successful payment")
+    except Exception as e:
+        print(f"❌ Error registering order: {e}")
+        import traceback
+        traceback.print_exc()
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"خطا در ثبت سفارش: {str(e)}")
+    
+    # Update WooCommerce order status to processing
+    await asyncio.to_thread(
+        woocommerce_client.update_order,
+        woo_order_id,
+        {"status": "processing"}
+    )
+    
+    order_dict = _enrich_order_with_customer(order)
+    return OrderResponse.model_validate(order_dict)
+
+
+@router.delete("/pending-payment/{woo_order_id}")
+async def cancel_pending_order(
+    woo_order_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Cancel/delete a pending order from WooCommerce if payment fails"""
+    print(f"🗑️  Cancelling pending order {woo_order_id}")
+    
+    if current_user.role not in [UserRole.SELLER, UserRole.STORE_MANAGER]:
+        raise HTTPException(status_code=403, detail="فقط فروشندگان و مدیران فروشگاه می‌توانند سفارش را لغو کنند")
+    
+    # Delete order from WooCommerce
+    deleted = await asyncio.to_thread(woocommerce_client.delete_order, woo_order_id, force=True)
+    
+    if not deleted:
+        raise HTTPException(
+            status_code=500,
+            detail=f"خطا در حذف سفارش در انتظار {woo_order_id} از ووکامرس"
+        )
+    
+    print(f"✅ Pending order {woo_order_id} deleted from WooCommerce")
+    
+    return {"message": f"Pending order {woo_order_id} cancelled successfully", "woo_order_id": woo_order_id}
+
+
 @router.get("", response_model=List[OrderResponse])
 async def get_orders(
     status: Optional[str] = Query(None, description="Filter by order status (case-insensitive)"),
@@ -465,16 +852,16 @@ async def get_order(
         selectinload(Order.items)  # Eager load order items
     ).filter(Order.id == order_id).first()
     if not order:
-        raise HTTPException(status_code=404, detail="Order not found")
+        raise HTTPException(status_code=404, detail="سفارش یافت نشد")
     
     # Check permissions
     if current_user.role == UserRole.SELLER and order.seller_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Access denied")
+        raise HTTPException(status_code=403, detail="دسترسی رد شد")
     elif current_user.role == UserRole.STORE_MANAGER:
         # Store Manager can only access orders from their sellers
         seller_ids = _get_manager_seller_ids(db, current_user.id)
         if not seller_ids or order.seller_id not in seller_ids:
-            raise HTTPException(status_code=403, detail="Access denied")
+            raise HTTPException(status_code=403, detail="دسترسی رد شد")
     
     # Debug: Check if items are loaded
     items_count = len(order.items) if order.items else 0
@@ -507,7 +894,7 @@ async def confirm_order(
     """Confirm order and assign to company (Operator only)"""
     order = db.query(Order).filter(Order.id == order_id).first()
     if not order:
-        raise HTTPException(status_code=404, detail="Order not found")
+        raise HTTPException(status_code=404, detail="سفارش یافت نشد")
     
     order.status = 'confirmed'  # Use string value for String(50) column
     order.is_new = False
@@ -529,7 +916,7 @@ async def update_order_status(
     """Update order status (Operator only)"""
     order = db.query(Order).filter(Order.id == order_id).first()
     if not order:
-        raise HTTPException(status_code=404, detail="Order not found")
+        raise HTTPException(status_code=404, detail="سفارش یافت نشد")
     
     order.status = status.value if isinstance(status, OrderStatus) else str(status).lower()
     if status != OrderStatus.PENDING:
@@ -549,7 +936,7 @@ async def mark_order_read(
     """Mark order as read (remove flashing)"""
     order = db.query(Order).filter(Order.id == order_id).first()
     if not order:
-        raise HTTPException(status_code=404, detail="Order not found")
+        raise HTTPException(status_code=404, detail="سفارش یافت نشد")
     
     order.is_new = False
     db.commit()
@@ -566,17 +953,17 @@ async def return_order(
     """Return order (Seller or Operator)"""
     order = db.query(Order).filter(Order.id == order_id).first()
     if not order:
-        raise HTTPException(status_code=404, detail="Order not found")
+        raise HTTPException(status_code=404, detail="سفارش یافت نشد")
     
     # Check permissions - Seller can return their own orders, Operator can return any
     if current_user.role == UserRole.SELLER and order.seller_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Access denied")
+        raise HTTPException(status_code=403, detail="دسترسی رد شد")
     
     # Only allow return if order is not already returned or cancelled
     if order.status_enum == OrderStatus.RETURNED:
-        raise HTTPException(status_code=400, detail="Order already returned")
+        raise HTTPException(status_code=400, detail="سفارش قبلاً مرجوع شده است")
     if order.status_enum == OrderStatus.CANCELLED:
-        raise HTTPException(status_code=400, detail="Cannot return cancelled order")
+        raise HTTPException(status_code=400, detail="نمی‌توان سفارش لغو شده را مرجوع کرد")
     
     order.status = 'returned'  # Use string value for String(50) column
     order.is_new = False
@@ -596,7 +983,7 @@ async def update_invoice_status(
     """Update invoice status (Clerk/Operator only)"""
     order = db.query(Order).filter(Order.id == order_id).first()
     if not order:
-        raise HTTPException(status_code=404, detail="Order not found")
+        raise HTTPException(status_code=404, detail="سفارش یافت نشد")
     
     # Normalize status to lowercase
     status = status.lower().strip()
@@ -609,7 +996,7 @@ async def update_invoice_status(
     }
     
     if status not in status_map:
-        raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {', '.join(status_map.keys())}")
+        raise HTTPException(status_code=400, detail=f"وضعیت نامعتبر. باید یکی از موارد زیر باشد: {', '.join(status_map.keys())}")
     
     # Get the enum member
     status_enum = status_map[status]
@@ -658,7 +1045,7 @@ async def update_invoice_status(
         
         raise HTTPException(
             status_code=500, 
-            detail=f"Error updating invoice status: {error_detail}"
+            detail=f"خطا در به‌روزرسانی وضعیت فاکتور: {error_detail}"
         )
     
     return {"message": "Invoice status updated", "order_id": order_id, "status": status}
@@ -678,19 +1065,19 @@ async def update_invoice(
     """
     order = db.query(Order).filter(Order.id == order_id).first()
     if not order:
-        raise HTTPException(status_code=404, detail="Order not found")
+        raise HTTPException(status_code=404, detail="سفارش یافت نشد")
     
     # Check permissions
     is_clerk = current_user.role in [UserRole.OPERATOR, UserRole.ADMIN]
     is_seller_or_manager = current_user.role in [UserRole.SELLER, UserRole.STORE_MANAGER]
     
     if not (is_clerk or is_seller_or_manager):
-        raise HTTPException(status_code=403, detail="Access denied")
+        raise HTTPException(status_code=403, detail="دسترسی رد شد")
     
     if is_seller_or_manager:
         # Seller/Manager can only edit their own orders
         if current_user.role == UserRole.SELLER and order.seller_id != current_user.id:
-            raise HTTPException(status_code=403, detail="Access denied")
+            raise HTTPException(status_code=403, detail="دسترسی رد شد")
         
         # Request edit (requires approval)
         order.edit_requested_by = current_user.id
@@ -743,10 +1130,10 @@ async def approve_invoice_edit(
     """Approve invoice edit request (Clerk/Operator only)"""
     order = db.query(Order).filter(Order.id == order_id).first()
     if not order:
-        raise HTTPException(status_code=404, detail="Order not found")
+        raise HTTPException(status_code=404, detail="سفارش یافت نشد")
     
     if not order.edit_requested_by:
-        raise HTTPException(status_code=400, detail="No edit request pending")
+        raise HTTPException(status_code=400, detail="هیچ درخواست ویرایشی در انتظار نیست")
     
     # Update invoice fields
     if invoice_data.invoice_number is not None:
@@ -992,7 +1379,7 @@ async def delete_order(
     """Delete order/invoice (Admin/Operator only)"""
     order = db.query(Order).filter(Order.id == order_id).first()
     if not order:
-        raise HTTPException(status_code=404, detail="Order not found")
+        raise HTTPException(status_code=404, detail="سفارش یافت نشد")
     
     try:
         # Delete related records first (to avoid foreign key constraint violations)
@@ -1035,7 +1422,7 @@ async def delete_order(
         traceback.print_exc()
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to delete order: {str(e)}"
+            detail=f"خطا در حذف سفارش: {str(e)}"
         )
 
 

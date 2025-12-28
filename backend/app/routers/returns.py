@@ -21,26 +21,26 @@ async def create_return(
 ):
     """Create return (Seller or Store Manager)"""
     if current_user.role not in [UserRole.SELLER, UserRole.STORE_MANAGER]:
-        raise HTTPException(status_code=403, detail="Only sellers and store managers can create returns")
+        raise HTTPException(status_code=403, detail="فقط فروشندگان و مدیران فروشگاه می‌توانند درخواست مرجوعی ایجاد کنند")
     
     # Verify order belongs to seller or store manager
     order = db.query(Order).filter(Order.id == return_data.order_id).first()
     if not order:
-        raise HTTPException(status_code=404, detail="Order not found")
+        raise HTTPException(status_code=404, detail="سفارش یافت نشد")
     
     # Check permissions
     if current_user.role == UserRole.SELLER and order.seller_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Access denied")
+        raise HTTPException(status_code=403, detail="دسترسی رد شد")
     elif current_user.role == UserRole.STORE_MANAGER:
         # Store manager can return orders from their sellers or their own orders
         if order.seller_id != current_user.id:
             seller = db.query(User).filter(User.id == order.seller_id).first()
             if not seller or seller.created_by != current_user.id:
-                raise HTTPException(status_code=403, detail="Access denied")
+                raise HTTPException(status_code=403, detail="دسترسی رد شد")
     
     # Validate items - ensure at least one item is selected
     if not return_data.items or len(return_data.items) == 0:
-        raise HTTPException(status_code=400, detail="At least one item must be selected for return")
+        raise HTTPException(status_code=400, detail="حداقل یک آیتم باید برای مرجوعی انتخاب شود")
     
     # Validate items belong to the order
     from app.models import OrderItem
@@ -52,9 +52,9 @@ async def create_return(
                 try:
                     order_item_id = int(order_item_id)
                 except (ValueError, TypeError):
-                    raise HTTPException(status_code=400, detail="Invalid order_item_id format")
+                    raise HTTPException(status_code=400, detail="فرمت شناسه آیتم سفارش نامعتبر است")
             if order_item_id not in order_item_ids:
-                raise HTTPException(status_code=400, detail=f"Item {order_item_id} does not belong to this order")
+                raise HTTPException(status_code=400, detail=f"آیتم {order_item_id} به این سفارش تعلق ندارد")
             # Validate quantity doesn't exceed original
             order_item = db.query(OrderItem).filter(OrderItem.id == order_item_id).first()
             if order_item:
@@ -62,7 +62,7 @@ async def create_return(
                 if return_quantity > order_item.quantity:
                     raise HTTPException(
                         status_code=400,
-                        detail=f"Return quantity ({return_quantity}) exceeds original quantity ({order_item.quantity})"
+                        detail=f"تعداد مرجوعی ({return_quantity}) از تعداد اصلی ({order_item.quantity}) بیشتر است"
                     )
     
     return_obj = Return(
@@ -140,13 +140,13 @@ async def get_return(
     """Get single return"""
     return_obj = db.query(Return).filter(Return.id == return_id).first()
     if not return_obj:
-        raise HTTPException(status_code=404, detail="Return not found")
+        raise HTTPException(status_code=404, detail="درخواست مرجوعی یافت نشد")
     
     # Check permissions
     if current_user.role == UserRole.SELLER:
         order = db.query(Order).filter(Order.id == return_obj.order_id).first()
         if order and order.seller_id != current_user.id:
-            raise HTTPException(status_code=403, detail="Access denied")
+            raise HTTPException(status_code=403, detail="دسترسی رد شد")
     elif current_user.role == UserRole.STORE_MANAGER:
         # Store Manager can only access returns from their sellers
         order = db.query(Order).filter(Order.id == return_obj.order_id).first()
@@ -157,7 +157,7 @@ async def get_return(
             ).all()
             seller_id_list = [sid[0] for sid in seller_ids]
             if not seller_id_list or order.seller_id not in seller_id_list:
-                raise HTTPException(status_code=403, detail="Access denied")
+                raise HTTPException(status_code=403, detail="دسترسی رد شد")
     
     return ReturnResponse.model_validate(return_obj)
 
@@ -171,7 +171,7 @@ async def mark_return_read(
     """Mark return as read (remove flashing)"""
     return_obj = db.query(Return).filter(Return.id == return_id).first()
     if not return_obj:
-        raise HTTPException(status_code=404, detail="Return not found")
+        raise HTTPException(status_code=404, detail="درخواست مرجوعی یافت نشد")
     
     return_obj.is_new = False
     db.commit()
@@ -188,10 +188,10 @@ async def approve_return(
     """Approve return request (Operator/Admin only)"""
     return_obj = db.query(Return).filter(Return.id == return_id).first()
     if not return_obj:
-        raise HTTPException(status_code=404, detail="Return not found")
+        raise HTTPException(status_code=404, detail="درخواست مرجوعی یافت نشد")
     
     if return_obj.status != "pending":
-        raise HTTPException(status_code=400, detail=f"Return is already {return_obj.status}")
+        raise HTTPException(status_code=400, detail=f"درخواست مرجوعی قبلاً {return_obj.status} است")
     
     return_obj.status = "approved"
     return_obj.is_new = False
@@ -211,10 +211,10 @@ async def reject_return(
     """Reject return request (Operator/Admin only)"""
     return_obj = db.query(Return).filter(Return.id == return_id).first()
     if not return_obj:
-        raise HTTPException(status_code=404, detail="Return not found")
+        raise HTTPException(status_code=404, detail="درخواست مرجوعی یافت نشد")
     
     if return_obj.status != "pending":
-        raise HTTPException(status_code=400, detail=f"Return is already {return_obj.status}")
+        raise HTTPException(status_code=400, detail=f"درخواست مرجوعی قبلاً {return_obj.status} است")
     
     return_obj.status = "rejected"
     return_obj.is_new = False

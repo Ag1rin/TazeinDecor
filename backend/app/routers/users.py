@@ -68,14 +68,14 @@ async def create_user(
     if existing:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Username already exists"
+            detail="نام کاربری قبلاً استفاده شده است"
         )
     
     # Store Manager can only create sellers
     if current_user.role == UserRole.STORE_MANAGER and user_data.role != UserRole.SELLER:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Store Manager can only create sellers"
+            detail="مدیر فروشگاه فقط می‌تواند فروشنده ایجاد کند"
         )
     
     # Generate referral code for sellers and store managers
@@ -144,13 +144,13 @@ async def update_user_credit(
     """Update user credit (Admin/Operator only)"""
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail="کاربر یافت نشد")
     
     # Only allow credit for sellers
     if user.role != UserRole.SELLER:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Credit can only be set for sellers"
+            detail="اعتبار فقط برای فروشندگان قابل تنظیم است"
         )
     
     user.credit = credit
@@ -183,7 +183,7 @@ async def delete_user(
     if user_id == current_user.id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot delete your own account"
+            detail="نمی‌توانید حساب کاربری خود را حذف کنید"
         )
 
     # Reassign orders to the admin performing the deletion
@@ -243,13 +243,13 @@ async def update_user(
         if user.role != UserRole.SELLER:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Can only update sellers"
+                detail="فقط می‌توان فروشندگان را به‌روزرسانی کرد"
             )
         # Store Manager cannot change role
         if user_data.role and user_data.role != UserRole.SELLER:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Cannot change role"
+                detail="نمی‌توان نقش را تغییر داد"
             )
     
     # Update fields

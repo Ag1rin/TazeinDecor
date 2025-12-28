@@ -23,10 +23,10 @@ async def create_installation(
     # Verify order belongs to seller
     order = db.query(Order).filter(Order.id == installation_data.order_id).first()
     if not order:
-        raise HTTPException(status_code=404, detail="Order not found")
+        raise HTTPException(status_code=404, detail="سفارش یافت نشد")
     
     if current_user.role == UserRole.SELLER and order.seller_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Access denied")
+        raise HTTPException(status_code=403, detail="دسترسی رد شد")
     
     installation = Installation(
         order_id=installation_data.order_id,
@@ -154,7 +154,7 @@ async def delete_installation(
     """Delete installation (Store Manager and Admin only)"""
     installation = db.query(Installation).filter(Installation.id == installation_id).first()
     if not installation:
-        raise HTTPException(status_code=404, detail="Installation not found")
+        raise HTTPException(status_code=404, detail="نصب یافت نشد")
     
     db.delete(installation)
     db.commit()
@@ -172,7 +172,7 @@ async def update_installation(
     """Update installation (Store Manager and Admin only)"""
     installation = db.query(Installation).filter(Installation.id == installation_id).first()
     if not installation:
-        raise HTTPException(status_code=404, detail="Installation not found")
+        raise HTTPException(status_code=404, detail="نصب یافت نشد")
     
     installation.installation_date = installation_data.installation_date
     installation.notes = installation_data.notes

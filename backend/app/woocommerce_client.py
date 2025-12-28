@@ -214,6 +214,68 @@ class WooCommerceClient:
             print(f"❌ Unexpected error updating product: {e}")
             return None
 
+    def get_order(self, order_id: int) -> Optional[Dict]:
+        """Get a single order from WooCommerce"""
+        try:
+            response = requests.get(
+                f"{self.api_url}/orders/{order_id}",
+                auth=self._get_auth(),
+                timeout=30
+            )
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            print(f"❌ Error fetching WooCommerce order {order_id}: {e}")
+            if hasattr(e, "response") and e.response is not None:
+                print(f"   Response status: {e.response.status_code}")
+                print(f"   Response body: {e.response.text[:500]}")
+            return None
+        except Exception as e:
+            print(f"❌ Unexpected error fetching WooCommerce order: {e}")
+            return None
+
+    def update_order(self, order_id: int, update_data: Dict) -> Optional[Dict]:
+        """Update an order in WooCommerce"""
+        try:
+            response = requests.put(
+                f"{self.api_url}/orders/{order_id}",
+                auth=self._get_auth(),
+                json=update_data,
+                timeout=30
+            )
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            print(f"❌ Error updating WooCommerce order {order_id}: {e}")
+            if hasattr(e, "response") and e.response is not None:
+                print(f"   Response status: {e.response.status_code}")
+                print(f"   Response body: {e.response.text[:500]}")
+            return None
+        except Exception as e:
+            print(f"❌ Unexpected error updating WooCommerce order: {e}")
+            return None
+
+    def delete_order(self, order_id: int, force: bool = True) -> bool:
+        """Delete an order from WooCommerce"""
+        try:
+            response = requests.delete(
+                f"{self.api_url}/orders/{order_id}",
+                auth=self._get_auth(),
+                params={"force": force},
+                timeout=30
+            )
+            response.raise_for_status()
+            return True
+        except requests.exceptions.RequestException as e:
+            print(f"❌ Error deleting WooCommerce order {order_id}: {e}")
+            if hasattr(e, "response") and e.response is not None:
+                print(f"   Response status: {e.response.status_code}")
+                print(f"   Response body: {e.response.text[:500]}")
+            return False
+        except Exception as e:
+            print(f"❌ Unexpected error deleting WooCommerce order: {e}")
+            return False
+
 
 woocommerce_client = WooCommerceClient()
 

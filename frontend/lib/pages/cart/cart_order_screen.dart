@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../providers/cart_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/order_service.dart';
+import '../../models/order_model.dart';
 import '../../utils/app_colors.dart';
 import '../../utils/persian_number.dart';
 import '../../utils/product_unit_display.dart';
@@ -188,13 +189,13 @@ class _CartOrderScreenState extends State<CartOrderScreen> {
 
       // Check if online payment is selected
       if (_paymentMethod == 'online') {
-        // Use special method for online payment to get woo_order_id
-        final orderData2 = await _orderService.createOrderForPayment(orderData);
+        // Create pending order in WooCommerce (not in local DB yet)
+        final pendingOrderData = await _orderService.createPendingOrderForPayment(orderData);
 
         if (!mounted) return;
 
-        if (orderData2 != null) {
-          await _processOnlinePayment(orderData2);
+        if (pendingOrderData != null) {
+          await _processOnlinePayment(pendingOrderData, orderData);
         } else {
           Fluttertoast.showToast(msg: 'خطا در ثبت سفارش');
         }
@@ -225,12 +226,16 @@ class _CartOrderScreenState extends State<CartOrderScreen> {
   }
 
   /// Process online payment via WebView
-  Future<void> _processOnlinePayment(Map<String, dynamic> order) async {
-    final cartProvider = Provider.of<CartProvider>(context, listen: false);
-
+  Future<void> _processOnlinePayment(
+    Map<String, dynamic> pendingOrder,
+    Map<String, dynamic> originalOrderData,
+  ) async {
     // Get the WooCommerce order ID from the response
-    final wooOrderId = order['woo_order_id'];
-    final orderKey = order['order_key'] ?? '';
+    final wooOrderId = pendingOrder['woo_order_id'];
+    final orderKey = pendingOrder['order_key'] ?? '';
+    final customerId = pendingOrder['customer_id'];
+    final totalAmount = pendingOrder['total_amount'] ?? 0.0;
+    final wholesaleAmount = pendingOrder['wholesale_amount'] ?? 0.0;
 
     if (wooOrderId == null) {
       Fluttertoast.showToast(msg: 'خطا در دریافت شناسه سفارش');
@@ -264,35 +269,123 @@ class _CartOrderScreenState extends State<CartOrderScreen> {
     if (result != null) {
       switch (result.result) {
         case PaymentResult.success:
-          // Payment successful
-          cartProvider.clearCart();
-          _showPaymentSuccessDialog(result);
+          // Payment successful - verify and register order
+          await _handlePaymentSuccess(
+            wooOrderId,
+            originalOrderData,
+            customerId,
+            totalAmount,
+            wholesaleAmount,
+            result,
+          );
           break;
         case PaymentResult.failed:
-          // Payment failed
-          _showPaymentFailedDialog(result);
+          // Payment failed - cancel pending order
+          await _handlePaymentFailed(wooOrderId, result);
           break;
         case PaymentResult.cancelled:
-          // Payment cancelled by user
-          Fluttertoast.showToast(
-            msg: 'پرداخت لغو شد. سفارش شما در انتظار پرداخت است.',
-            toastLength: Toast.LENGTH_LONG,
-          );
-          // Navigate back - order is created but pending payment
-          Navigator.of(context).pop();
+          // Payment cancelled by user - cancel pending order
+          await _handlePaymentCancelled(wooOrderId);
           break;
       }
     } else {
-      // User closed without completing payment
-      Fluttertoast.showToast(
-        msg: 'سفارش ثبت شد اما پرداخت انجام نشد',
-        toastLength: Toast.LENGTH_LONG,
-      );
-      Navigator.of(context).pop();
+      // User closed without completing payment - cancel pending order
+      await _handlePaymentCancelled(wooOrderId);
     }
   }
 
-  void _showPaymentSuccessDialog(PaymentResultData result) {
+  /// Handle successful payment - verify and register order
+  Future<void> _handlePaymentSuccess(
+    int wooOrderId,
+    Map<String, dynamic> originalOrderData,
+    int customerId,
+    double totalAmount,
+    double wholesaleAmount,
+    PaymentResultData result,
+  ) async {
+    final cartProvider = Provider.of<CartProvider>(context, listen: false);
+
+    try {
+      // Show loading
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+
+      // Verify payment and register order
+      final order = await _orderService.verifyPaymentAndRegisterOrder(
+        wooOrderId,
+        originalOrderData,
+        customerId,
+        totalAmount,
+        wholesaleAmount,
+      );
+
+      if (!mounted) return;
+      Navigator.of(context).pop(); // Close loading dialog
+
+      if (order != null) {
+        // Order successfully registered
+        cartProvider.clearCart();
+        _showPaymentSuccessDialog(result, order);
+      } else {
+        // Verification failed
+        Fluttertoast.showToast(
+          msg: 'خطا در تایید پرداخت. لطفا با پشتیبانی تماس بگیرید.',
+          toastLength: Toast.LENGTH_LONG,
+        );
+        Navigator.of(context).pop(); // Go back to cart
+      }
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.of(context).pop(); // Close loading dialog
+      
+      Fluttertoast.showToast(
+        msg: 'خطا در تایید پرداخت: ${e.toString()}',
+        toastLength: Toast.LENGTH_LONG,
+      );
+      Navigator.of(context).pop(); // Go back to cart
+    }
+  }
+
+  /// Handle failed payment - cancel pending order
+  Future<void> _handlePaymentFailed(
+    int wooOrderId,
+    PaymentResultData result,
+  ) async {
+    try {
+      // Cancel pending order in WooCommerce
+      await _orderService.cancelPendingOrder(wooOrderId);
+    } catch (e) {
+      print('⚠️ Error cancelling pending order: $e');
+    }
+
+    if (!mounted) return;
+    _showPaymentFailedDialog(result);
+  }
+
+  /// Handle cancelled payment - cancel pending order
+  Future<void> _handlePaymentCancelled(int wooOrderId) async {
+    try {
+      // Cancel pending order in WooCommerce
+      await _orderService.cancelPendingOrder(wooOrderId);
+    } catch (e) {
+      print('⚠️ Error cancelling pending order: $e');
+    }
+
+    if (!mounted) return;
+    
+    Fluttertoast.showToast(
+      msg: 'پرداخت لغو شد. سفارش ثبت نشد.',
+      toastLength: Toast.LENGTH_LONG,
+    );
+    Navigator.of(context).pop(); // Go back to cart
+  }
+
+  void _showPaymentSuccessDialog(PaymentResultData result, [OrderModel? order]) {
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -328,7 +421,23 @@ class _CartOrderScreenState extends State<CartOrderScreen> {
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 14, color: Colors.grey[700]),
               ),
-              if (result.orderId != null) ...[
+              if (order != null) ...[
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[100],
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    'شماره سفارش: ${order.orderNumber}',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ] else if (result.orderId != null) ...[
                 const SizedBox(height: 12),
                 Container(
                   padding: const EdgeInsets.symmetric(
@@ -965,10 +1074,16 @@ class _CartOrderScreenState extends State<CartOrderScreen> {
                               as Map<String, dynamic>?;
                       final apiUnit = ProductUnitDisplay.getUnitFromCalculator(calculator);
 
+                      final coverageStr = ProductUnitDisplay.formatCoverage(
+                        quantity: item.quantity,
+                        apiUnit: apiUnit,
+                        calculator: calculator,
+                      );
+
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Quantity controls
+                          // Quantity controls - Unit row
                           Row(
                             children: [
                               IconButton(
@@ -984,13 +1099,15 @@ class _CartOrderScreenState extends State<CartOrderScreen> {
                                   }
                                 },
                               ),
-                              Text(
-                                ProductUnitDisplay.formatQuantityWithCoverage(
-                                  quantity: item.quantity,
-                                  apiUnit: apiUnit,
-                                  calculator: calculator,
+                              Flexible(
+                                child: Text(
+                                  ProductUnitDisplay.formatQuantityWithUnit(
+                                    quantity: item.quantity,
+                                    apiUnit: apiUnit,
+                                  ),
+                                  style: const TextStyle(fontSize: 16),
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                                style: const TextStyle(fontSize: 16),
                               ),
                               IconButton(
                                 icon: const Icon(Icons.add_circle_outline),
@@ -1003,6 +1120,19 @@ class _CartOrderScreenState extends State<CartOrderScreen> {
                               ),
                             ],
                           ),
+                          // Coverage row (متراژ) - only show if available
+                          if (coverageStr != null && coverageStr.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(left: 48.0),
+                              child: Text(
+                                coverageStr,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.grey,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
                         ],
                       );
                     },

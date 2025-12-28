@@ -1427,34 +1427,68 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
                             ),
                           const SizedBox(height: 8),
                           // Quantity
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: AppColors.primaryBlue.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.shopping_cart,
-                                  size: 14,
-                                  color: AppColors.primaryBlue,
+                          Builder(
+                            builder: (context) {
+                              final coverageStr = ProductUnitDisplay.formatCoverage(
+                                quantity: quantity,
+                                apiUnit: apiUnit,
+                                calculator: calculator,
+                              );
+                              
+                              return Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
                                 ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  'تعداد: ${ProductUnitDisplay.formatQuantityWithCoverage(quantity: quantity, apiUnit: apiUnit, calculator: calculator)}',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.bold,
-                                    color: AppColors.primaryBlue,
-                                  ),
+                                decoration: BoxDecoration(
+                                  color: AppColors.primaryBlue.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(6),
                                 ),
-                              ],
-                            ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    // Unit row
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          Icons.shopping_cart,
+                                          size: 14,
+                                          color: AppColors.primaryBlue,
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Flexible(
+                                          child: Text(
+                                            'تعداد: ${ProductUnitDisplay.formatQuantityWithUnit(quantity: quantity, apiUnit: apiUnit)}',
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.bold,
+                                              color: AppColors.primaryBlue,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    // Coverage row (متراژ) - only show if available
+                                    if (coverageStr != null && coverageStr.isNotEmpty)
+                                      Padding(
+                                        padding: const EdgeInsets.only(left: 18.0, top: 4.0),
+                                        child: Text(
+                                          coverageStr,
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w500,
+                                            color: AppColors.primaryBlue.withOpacity(0.8),
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              );
+                            },
                           ),
                         ],
                       ),
