@@ -8,7 +8,7 @@ import '../../models/order_model.dart';
 import '../../utils/persian_number.dart';
 import '../../utils/persian_date.dart';
 import '../../utils/app_colors.dart';
-import '../../utils/product_unit_helper.dart';
+import '../../utils/product_unit_display_helper.dart';
 import '../../utils/status_labels.dart';
 import '../../services/aggregated_pdf_service.dart';
 import '../../services/company_service.dart';
@@ -1074,86 +1074,6 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     return widget.invoice;
   }
 
-  /// Check if a product is a roll/wallpaper product based on calculator data
-  bool _isRollProduct(Map<String, dynamic>? productDetails) {
-    if (productDetails == null) return false;
-
-    // Check calculator object for unit type
-    final calculator = productDetails['calculator'];
-    if (calculator != null) {
-      // Check if unit is explicitly set to 'roll' or 'رول'
-      final unit =
-          calculator['unit']?.toString() ?? calculator['method']?.toString();
-      if (unit != null) {
-        final unitLower = unit.toLowerCase().trim();
-        if (unitLower == 'roll' || unitLower == 'رول') {
-          return true;
-        }
-      }
-
-      // Check if roll_w and roll_l are present (indicates roll product)
-      final params = calculator['params'] as Map<String, dynamic>?;
-      final rollW =
-          params?['roll_w'] ??
-          params?['roll_width'] ??
-          calculator['roll_w'] ??
-          calculator['roll_width'];
-      final rollL =
-          params?['roll_l'] ??
-          params?['roll_length'] ??
-          calculator['roll_l'] ??
-          calculator['roll_length'];
-
-      if (rollW != null && rollL != null) {
-        // Try to parse as numbers to ensure they're valid
-        try {
-          final w = (rollW as num).toDouble();
-          final l = (rollL as num).toDouble();
-          if (w > 0 && l > 0) {
-            return true;
-          }
-        } catch (e) {
-          // If parsing fails, check if they're strings that can be parsed
-          final wStr = rollW.toString();
-          final lStr = rollL.toString();
-          if (double.tryParse(wStr) != null && double.tryParse(lStr) != null) {
-            final w = double.parse(wStr);
-            final l = double.parse(lStr);
-            if (w > 0 && l > 0) {
-              return true;
-            }
-          }
-        }
-      }
-    }
-
-    // Also check top-level calculator fields if calculator object doesn't exist
-    final rollW = productDetails['roll_w'] ?? productDetails['roll_width'];
-    final rollL = productDetails['roll_l'] ?? productDetails['roll_length'];
-    if (rollW != null && rollL != null) {
-      try {
-        final w = (rollW as num).toDouble();
-        final l = (rollL as num).toDouble();
-        if (w > 0 && l > 0) {
-          return true;
-        }
-      } catch (e) {
-        // Try string parsing
-        final wStr = rollW.toString();
-        final lStr = rollL.toString();
-        if (double.tryParse(wStr) != null && double.tryParse(lStr) != null) {
-          final w = double.parse(wStr);
-          final l = double.parse(lStr);
-          if (w > 0 && l > 0) {
-            return true;
-          }
-        }
-      }
-    }
-
-    return false;
-  }
-
   /// Load product details from secure WooCommerce API
   ///
   /// This method fetches complete product information from the secure API endpoint:
@@ -1338,100 +1258,13 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
 
     final quantity = item.quantity;
 
-    // Determine unit based on category and calculator data
-    // Get category name from product details
-    String? categoryName;
-    if (productDetails != null) {
-      // Try multiple sources for category name
-      // 1. Direct category_name field
-      categoryName = productDetails['category_name']?.toString();
-
-      // 2. Direct category field
-      if (categoryName == null || categoryName.isEmpty) {
-        categoryName = productDetails['category']?.toString();
-      }
-
-      // 3. From categories array (WooCommerce format)
-      if ((categoryName == null || categoryName.isEmpty) &&
-          productDetails['categories'] != null) {
-        final categories = productDetails['categories'];
-        if (categories is List && categories.isNotEmpty) {
-          final firstCategory = categories[0];
-          if (firstCategory is Map) {
-            categoryName = firstCategory['name']?.toString();
-          } else if (firstCategory is String) {
-            categoryName = firstCategory;
-          }
-        }
-      }
-    }
-
-    // Use ProductUnitHelper to determine display unit
-    final calculator = productDetails?['calculator'] as Map<String, dynamic>?;
-    final calculatorUnit =
-        calculator?['unit']?.toString() ?? calculator?['method']?.toString();
-
-    final unit = ProductUnitHelper.getDisplayUnit(
-      categoryName: categoryName,
-      calculatorUnit: calculatorUnit,
-      hasRollDimensions: _isRollProduct(productDetails),
-      hasPackageCoverage:
-          calculator?['pkg_cov'] != null ||
-          calculator?['package_coverage'] != null ||
-          calculator?['params']?['pkg_cov'] != null,
-      hasBranchLength:
-          calculator?['branch_l'] != null ||
-          calculator?['branch_length'] != null ||
-          calculator?['params']?['branch_l'] != null,
-    );
+    // Get unit directly from secure API response
+    final unit = ProductUnitDisplayHelper.getUnitFromAPI(productDetails);
 
     // Calculate line total (quantity × wholesale price if available, otherwise use item total)
     final lineTotal = colleaguePrice != null
         ? quantity * colleaguePrice
         : item.total;
-
-    // Calculate area/length coverage for display
-    double? areaCoverage;
-    double? lengthCoverage;
-    if (calculator != null) {
-      if (ProductUnitHelper.isParquetCategory(categoryName) ||
-          ProductUnitHelper.isWallpaperCategory(categoryName)) {
-        // Calculate area coverage
-        final packageCoverage =
-            calculator['pkg_cov'] ??
-            calculator['package_coverage'] ??
-            calculator['params']?['pkg_cov'];
-        if (packageCoverage != null) {
-          final coverage = (packageCoverage as num).toDouble();
-          areaCoverage = quantity * coverage;
-        } else if (ProductUnitHelper.isWallpaperCategory(categoryName)) {
-          // For wallpaper, calculate from roll dimensions
-          final rollW =
-              calculator['roll_w'] ??
-              calculator['roll_width'] ??
-              calculator['params']?['roll_w'];
-          final rollL =
-              calculator['roll_l'] ??
-              calculator['roll_length'] ??
-              calculator['params']?['roll_l'];
-          if (rollW != null && rollL != null) {
-            final rollArea =
-                (rollW as num).toDouble() * (rollL as num).toDouble();
-            areaCoverage = quantity * rollArea;
-          }
-        }
-      } else if (ProductUnitHelper.isParquetToolsCategory(categoryName)) {
-        // Calculate length coverage
-        final branchLength =
-            calculator['branch_l'] ??
-            calculator['branch_length'] ??
-            calculator['params']?['branch_l'];
-        if (branchLength != null) {
-          final length = (branchLength as num).toDouble();
-          lengthCoverage = quantity * length;
-        }
-      }
-    }
 
     return Consumer<AuthProvider>(
       builder: (context, authProvider, _) {
@@ -1612,7 +1445,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
                                 ),
                                 const SizedBox(width: 4),
                                 Text(
-                                  'تعداد: ${ProductUnitHelper.formatQuantityWithCoverage(quantity: quantity, unit: unit, areaCoverage: areaCoverage, lengthCoverage: lengthCoverage, categoryName: categoryName)}',
+                                  'تعداد: ${ProductUnitDisplayHelper.formatQuantityWithCoverage(quantity: quantity, unit: unit, productDetails: productDetails)}',
                                   style: TextStyle(
                                     fontSize: 13,
                                     fontWeight: FontWeight.bold,

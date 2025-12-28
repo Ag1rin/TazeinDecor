@@ -8,7 +8,7 @@ import '../../services/product_service.dart';
 import '../../utils/app_colors.dart';
 import '../../utils/persian_number.dart';
 import '../../utils/persian_date.dart';
-import '../../utils/product_unit_helper.dart';
+import '../../utils/product_unit_display_helper.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
@@ -471,68 +471,18 @@ class _ReturnRequestScreenState extends State<ReturnRequestScreen> {
                       const SizedBox(height: 8),
                       Builder(
                         builder: (context) {
-                          // Get category from product details cache
+                          // Get product details from cache
                           final productDetails =
                               _productDetailsCache[item.productId];
-                          String? categoryName;
-                          if (productDetails != null) {
-                            categoryName =
-                                productDetails['category_name']?.toString() ??
-                                productDetails['category']?.toString();
-                          }
-
-                          // Get calculator data
-                          final calculator =
-                              productDetails?['calculator']
-                                  as Map<String, dynamic>?;
-                          final calculatorUnit =
-                              calculator?['unit']?.toString() ??
-                              calculator?['method']?.toString();
-
-                          // Determine unit
-                          final unit = ProductUnitHelper.getDisplayUnit(
-                            categoryName: categoryName,
-                            calculatorUnit: calculatorUnit,
-                            hasRollDimensions:
-                                calculator?['roll_w'] != null ||
-                                calculator?['roll_width'] != null,
-                            hasPackageCoverage:
-                                calculator?['pkg_cov'] != null ||
-                                calculator?['package_coverage'] != null,
-                            hasBranchLength:
-                                calculator?['branch_l'] != null ||
-                                calculator?['branch_length'] != null,
-                          );
-
-                          // Calculate area coverage
-                          double? areaCoverage;
-                          if (calculator != null) {
-                            if (ProductUnitHelper.isParquetCategory(categoryName) || 
-                                ProductUnitHelper.isWallpaperCategory(categoryName)) {
-                              final packageCoverage = calculator['pkg_cov'] ?? 
-                                  calculator['package_coverage'] ??
-                                  calculator['params']?['pkg_cov'];
-                              if (packageCoverage != null) {
-                                areaCoverage = maxQuantity * (packageCoverage as num).toDouble();
-                              } else if (ProductUnitHelper.isWallpaperCategory(categoryName)) {
-                                final rollW = calculator['roll_w'] ?? calculator['roll_width'] ?? 
-                                             calculator['params']?['roll_w'];
-                                final rollL = calculator['roll_l'] ?? calculator['roll_length'] ?? 
-                                             calculator['params']?['roll_l'];
-                                if (rollW != null && rollL != null) {
-                                  final rollArea = (rollW as num).toDouble() * (rollL as num).toDouble();
-                                  areaCoverage = maxQuantity * rollArea;
-                                }
-                              }
-                            }
-                          }
+                          
+                          // Get unit directly from secure API response
+                          final unit = ProductUnitDisplayHelper.getUnitFromAPI(productDetails);
                           
                           return Text(
-                            'تعداد: ${ProductUnitHelper.formatQuantityWithCoverage(
+                            'تعداد: ${ProductUnitDisplayHelper.formatQuantityWithCoverage(
                               quantity: maxQuantity,
                               unit: unit,
-                              areaCoverage: areaCoverage,
-                              categoryName: categoryName,
+                              productDetails: productDetails,
                             )}',
                             style: TextStyle(
                               fontSize: 14,
@@ -559,36 +509,11 @@ class _ReturnRequestScreenState extends State<ReturnRequestScreen> {
               const Divider(),
               Builder(
                 builder: (context) {
-                  // Get category from product details cache
+                  // Get product details from cache
                   final productDetails = _productDetailsCache[item.productId];
-                  String? categoryName;
-                  if (productDetails != null) {
-                    categoryName =
-                        productDetails['category_name']?.toString() ??
-                        productDetails['category']?.toString();
-                  }
-
-                  // Get calculator data
-                  final calculator =
-                      productDetails?['calculator'] as Map<String, dynamic>?;
-                  final calculatorUnit =
-                      calculator?['unit']?.toString() ??
-                      calculator?['method']?.toString();
-
-                  // Determine unit
-                  final unit = ProductUnitHelper.getDisplayUnit(
-                    categoryName: categoryName,
-                    calculatorUnit: calculatorUnit,
-                    hasRollDimensions:
-                        calculator?['roll_w'] != null ||
-                        calculator?['roll_width'] != null,
-                    hasPackageCoverage:
-                        calculator?['pkg_cov'] != null ||
-                        calculator?['package_coverage'] != null,
-                    hasBranchLength:
-                        calculator?['branch_l'] != null ||
-                        calculator?['branch_length'] != null,
-                  );
+                  
+                  // Get unit directly from secure API response
+                  final unit = ProductUnitDisplayHelper.getUnitFromAPI(productDetails);
 
                   return Row(
                     children: [
