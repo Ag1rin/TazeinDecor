@@ -10,7 +10,9 @@ from app.schemas import ProductResponse, CategoryResponse
 from app.dependencies import require_role, get_current_user
 from app.woocommerce_client import woocommerce_client
 from app.woocommerce_cache import woocommerce_cache
+from app.config import settings
 import json
+import httpx
 
 router = APIRouter(prefix="/api/products", tags=["products"])
 
@@ -869,4 +871,46 @@ async def update_product_stock(
     except Exception as e:
         print(f"❌ Error updating product stock: {e}")
         raise HTTPException(status_code=500, detail=f"خطا در به‌روزرسانی موجودی: {str(e)}")
+
+
+@router.get("/{product_id}/colleague-price")
+async def get_colleague_price(
+    product_id: int,
+    current_user: User = Depends(require_seller_or_store_manager)
+):
+    """Get colleague_price from secure API midia (Seller/Store Manager only)
+    
+    This endpoint proxies the request to the secure API to avoid CORS/ORB issues.
+    """
+    try:
+        api_url = f"{settings.WOOCOMMERCE_URL}/wp-json/hooshmate/v1/product/{product_id}"
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(
+                api_url,
+                headers={
+                    'x-api-key': 'midia@2025_SecureKey_#98765',
+                    'Content-Type': 'application/json',
+                }
+            )
+            if response.status_code == 200:
+                data = response.json()
+                colleague_price = data.get('colleague_price')
+                return {
+                    "product_id": product_id,
+                    "colleague_price": colleague_price,
+                    "data": data  # Return full data for compatibility
+                }
+            else:
+                raise HTTPException(
+                    status_code=response.status_code,
+                    detail=f"خطا در دریافت قیمت همکاری از API: {response.status_code}"
+                )
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="زمان درخواست به پایان رسید")
+    except Exception as e:
+        print(f"⚠️  Error fetching colleague_price from API for product {product_id}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"خطا در دریافت قیمت همکاری: {str(e)}"
+        )
 

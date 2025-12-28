@@ -11,8 +11,10 @@ from app.models import Order, OrderItem, Customer, User, UserRole, OrderStatus, 
 from app.schemas import OrderCreate, OrderResponse, OrderItemResponse, InvoiceUpdate
 from app.dependencies import get_current_user, require_role
 from app.woocommerce_client import woocommerce_client
+from app.config import settings
 import uuid
 import asyncio
+import httpx
 
 router = APIRouter(prefix="/api/orders", tags=["orders"])
 
@@ -24,6 +26,31 @@ def _get_manager_seller_ids(db: Session, manager_id: int) -> List[int]:
         User.created_by == manager_id
     ).all()
     return [seller_id[0] for seller_id in sellers]
+
+
+async def _get_colleague_price_from_api(product_id: int) -> Optional[float]:
+    """Fetch colleague_price from secure API midia if not provided by frontend"""
+    try:
+        api_url = f"{settings.WOOCOMMERCE_URL}/wp-json/hooshmate/v1/product/{product_id}"
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            response = await client.get(
+                api_url,
+                headers={
+                    'x-api-key': 'midia@2025_SecureKey_#98765',
+                    'Content-Type': 'application/json',
+                }
+            )
+            if response.status_code == 200:
+                data = response.json()
+                colleague_price = data.get('colleague_price')
+                if colleague_price:
+                    try:
+                        return float(colleague_price)
+                    except (ValueError, TypeError):
+                        pass
+    except Exception as e:
+        print(f"⚠️  Error fetching colleague_price from API for product {product_id}: {e}")
+    return None
 
 
 def _get_user_discount_for_category(db: Session, user_id: int, category_id: Optional[int]) -> Optional[Discount]:
@@ -466,11 +493,19 @@ async def create_pending_order_for_payment(
         # Frontend sends colleague_price in item_data.price (from API midia)
         # This ensures users pay the cooperation price shown in the app, not the retail price
         if not item_data.price or item_data.price <= 0:
-            raise HTTPException(
-                status_code=400,
-                detail=f"قیمت همکاری برای محصول {woo_product_id} یافت نشد. لطفا دوباره تلاش کنید."
-            )
-        wholesale_price = float(item_data.price)  # This is colleague_price from API midia
+            # Try to fetch from API midia as fallback
+            print(f"⚠️  Price not provided by frontend for product {woo_product_id}, trying to fetch from API...")
+            colleague_price = await _get_colleague_price_from_api(woo_product_id)
+            if colleague_price and colleague_price > 0:
+                wholesale_price = colleague_price
+                print(f"✅ Fetched colleague_price from API: {wholesale_price}")
+            else:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"قیمت همکاری برای محصول {woo_product_id} یافت نشد. لطفا صفحه را رفرش کنید و دوباره تلاش کنید."
+                )
+        else:
+            wholesale_price = float(item_data.price)  # This is colleague_price from API midia
         
         # Apply user discount if applicable
         product_categories = woo_product.get('categories', [])

@@ -135,23 +135,18 @@ class ProductService {
     }
   }
 
-  /// Fetch product from secure custom API
-  /// Endpoint: GET https://your-site.com/wp-json/hooshmate/v1/product/{productId}
+  /// Fetch product from secure custom API via backend proxy
+  /// This avoids CORS/ORB issues by going through our backend
+  /// Endpoint: GET /api/products/{productId}/colleague-price
   Future<Map<String, dynamic>?> getProductFromSecureAPI(int productId) async {
     try {
-      final dio = Dio();
-      final response = await dio.get(
-        '${AppConfig.wooCommerceUrl}/wp-json/hooshmate/v1/product/$productId',
-        options: Options(
-          headers: {
-            'x-api-key': 'midia@2025_SecureKey_#98765',
-            'Content-Type': 'application/json',
-          },
-        ),
-      );
-
+      // Use backend API instead of direct API midia call to avoid CORS/ORB issues
+      final response = await _api.get('/products/$productId/colleague-price');
+      
       if (response.statusCode == 200) {
-        return response.data as Map<String, dynamic>;
+        final data = response.data as Map<String, dynamic>;
+        // Return the full data object for compatibility
+        return data['data'] as Map<String, dynamic>? ?? data;
       }
       return null;
     } catch (e) {

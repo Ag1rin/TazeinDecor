@@ -157,6 +157,19 @@ class _CartOrderScreenState extends State<CartOrderScreen> {
       return;
     }
 
+    // Check if all products have cooperation price (colleaguePrice)
+    final itemsWithoutPrice = cartProvider.items.where((item) {
+      return item.product.displayPrice == null || item.product.displayPrice! <= 0;
+    }).toList();
+    
+    if (itemsWithoutPrice.isNotEmpty) {
+      Fluttertoast.showToast(
+        msg: 'برخی محصولات قیمت همکاری ندارند. لطفا صفحه را رفرش کنید و دوباره تلاش کنید.',
+        toastLength: Toast.LENGTH_LONG,
+      );
+      return;
+    }
+
     setState(() {
       _isSubmitting = true;
     });
@@ -175,12 +188,17 @@ class _CartOrderScreenState extends State<CartOrderScreen> {
             ? _referralCodeController.text.trim().toUpperCase()
             : null,
         'items': cartProvider.items.map((item) {
+          // Ensure we always send a valid cooperation price
+          final price = item.product.displayPrice;
+          if (price == null || price <= 0) {
+            throw Exception('قیمت همکاری برای محصول ${item.product.name} یافت نشد');
+          }
           return {
             // Use local DB product id (not WooCommerce id)
             'product_id': item.localProductId,
             'quantity': item.quantity,
             'unit': item.unit,
-            'price': item.product.displayPrice ?? 0.0,
+            'price': price, // Always send valid cooperation price
             'variation_id': item.variationId,
             'variation_pattern': item.variationPattern,
           };
