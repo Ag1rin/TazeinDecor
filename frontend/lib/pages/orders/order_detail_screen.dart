@@ -5,7 +5,7 @@ import '../../models/order_model.dart';
 import '../../utils/persian_number.dart';
 import '../../utils/persian_date.dart';
 import '../../utils/app_colors.dart';
-import '../../utils/product_unit_display_helper.dart';
+import '../../utils/product_unit_display.dart';
 import '../../services/order_service.dart';
 import '../../services/product_service.dart';
 import '../../pages/returns/return_request_screen.dart';
@@ -294,17 +294,16 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                   const SizedBox(height: 4),
                   Builder(
                     builder: (context) {
-                      // Get product details from cache
+                      // Get calculator data from secure API response
                       final productDetails = _productDetailsCache[item.productId];
-                      
-                      // Get unit directly from secure API response
-                      final unit = ProductUnitDisplayHelper.getUnitFromAPI(productDetails);
+                      final calculator = productDetails?['calculator'] as Map<String, dynamic>?;
+                      final apiUnit = ProductUnitDisplay.getUnitFromCalculator(calculator);
                       
                       return Text(
-                        ProductUnitDisplayHelper.formatQuantityWithCoverage(
+                        ProductUnitDisplay.formatQuantityWithCoverage(
                           quantity: item.quantity,
-                          unit: unit,
-                          productDetails: productDetails,
+                          apiUnit: apiUnit,
+                          calculator: calculator,
                         ),
                         style: TextStyle(fontSize: 14, color: Colors.grey[700]),
                       );

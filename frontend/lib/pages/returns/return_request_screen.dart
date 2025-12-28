@@ -8,7 +8,7 @@ import '../../services/product_service.dart';
 import '../../utils/app_colors.dart';
 import '../../utils/persian_number.dart';
 import '../../utils/persian_date.dart';
-import '../../utils/product_unit_display_helper.dart';
+import '../../utils/product_unit_display.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
@@ -471,18 +471,19 @@ class _ReturnRequestScreenState extends State<ReturnRequestScreen> {
                       const SizedBox(height: 8),
                       Builder(
                         builder: (context) {
-                          // Get product details from cache
+                          // Get calculator data from secure API response
                           final productDetails =
                               _productDetailsCache[item.productId];
-                          
-                          // Get unit directly from secure API response
-                          final unit = ProductUnitDisplayHelper.getUnitFromAPI(productDetails);
+                          final calculator =
+                              productDetails?['calculator']
+                                  as Map<String, dynamic>?;
+                          final apiUnit = ProductUnitDisplay.getUnitFromCalculator(calculator);
                           
                           return Text(
-                            'تعداد: ${ProductUnitDisplayHelper.formatQuantityWithCoverage(
+                            'تعداد: ${ProductUnitDisplay.formatQuantityWithCoverage(
                               quantity: maxQuantity,
-                              unit: unit,
-                              productDetails: productDetails,
+                              apiUnit: apiUnit,
+                              calculator: calculator,
                             )}',
                             style: TextStyle(
                               fontSize: 14,
@@ -509,11 +510,12 @@ class _ReturnRequestScreenState extends State<ReturnRequestScreen> {
               const Divider(),
               Builder(
                 builder: (context) {
-                  // Get product details from cache
+                  // Get calculator data from secure API response
                   final productDetails = _productDetailsCache[item.productId];
-                  
-                  // Get unit directly from secure API response
-                  final unit = ProductUnitDisplayHelper.getUnitFromAPI(productDetails);
+                  final calculator =
+                      productDetails?['calculator'] as Map<String, dynamic>?;
+                  final apiUnit = ProductUnitDisplay.getUnitFromCalculator(calculator);
+                  final unit = ProductUnitDisplay.getDisplayUnit(apiUnit);
 
                   return Row(
                     children: [

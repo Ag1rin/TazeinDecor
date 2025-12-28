@@ -8,7 +8,7 @@ import '../../models/order_model.dart';
 import '../../utils/persian_number.dart';
 import '../../utils/persian_date.dart';
 import '../../utils/app_colors.dart';
-import '../../utils/product_unit_display_helper.dart';
+import '../../utils/product_unit_display.dart';
 import '../../utils/status_labels.dart';
 import '../../services/aggregated_pdf_service.dart';
 import '../../services/company_service.dart';
@@ -1258,8 +1258,9 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
 
     final quantity = item.quantity;
 
-    // Get unit directly from secure API response
-    final unit = ProductUnitDisplayHelper.getUnitFromAPI(productDetails);
+    // Get calculator data from secure API response
+    final calculator = productDetails?['calculator'] as Map<String, dynamic>?;
+    final apiUnit = ProductUnitDisplay.getUnitFromCalculator(calculator);
 
     // Calculate line total (quantity × wholesale price if available, otherwise use item total)
     final lineTotal = colleaguePrice != null
@@ -1445,7 +1446,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
                                 ),
                                 const SizedBox(width: 4),
                                 Text(
-                                  'تعداد: ${ProductUnitDisplayHelper.formatQuantityWithCoverage(quantity: quantity, unit: unit, productDetails: productDetails)}',
+                                  'تعداد: ${ProductUnitDisplay.formatQuantityWithCoverage(quantity: quantity, apiUnit: apiUnit, calculator: calculator)}',
                                   style: TextStyle(
                                     fontSize: 13,
                                     fontWeight: FontWeight.bold,

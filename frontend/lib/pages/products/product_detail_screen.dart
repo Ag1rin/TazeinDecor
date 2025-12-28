@@ -9,7 +9,7 @@ import '../../models/product_model.dart';
 import '../../services/product_service.dart';
 import '../../utils/app_colors.dart';
 import '../../utils/persian_number.dart';
-import '../../utils/product_unit_display_helper.dart';
+import '../../utils/product_unit_display.dart';
 import '../../widgets/product_calculator_widget.dart';
 import '../../widgets/smart_quantity_calculator.dart';
 import '../../widgets/image_viewer.dart';
@@ -573,18 +573,41 @@ class _ProductDetailScreenState extends State<ProductDetailScreen>
           // Quantity with area coverage
           Builder(
             builder: (context) {
-              // Get unit directly from secure API response
-              final unit = ProductUnitDisplayHelper.getUnitFromAPI(_secureProductData);
+              // Get calculator data from secure API response
+              final calculator = _calculator;
+              final apiUnit = ProductUnitDisplay.getUnitFromCalculator(calculator);
+              
+              // Convert ProductCalculator to Map for area coverage calculation
+              Map<String, dynamic>? calculatorMap;
+              if (calculator != null) {
+                calculatorMap = {
+                  'unit': calculator.unit,
+                  'roll_w': calculator.rollWidth,
+                  'roll_l': calculator.rollLength,
+                  'roll_width': calculator.rollWidth,
+                  'roll_length': calculator.rollLength,
+                  'pkg_cov': calculator.packageCoverage,
+                  'package_coverage': calculator.packageCoverage,
+                  'package_area': calculator.packageArea,
+                  'branch_l': calculator.branchLength,
+                  'branch_length': calculator.branchLength,
+                  'tile_area': calculator.tileArea,
+                  'tile_w': calculator.tileWidth,
+                  'tile_l': calculator.tileLength,
+                  'tile_width': calculator.tileWidth,
+                  'tile_length': calculator.tileLength,
+                };
+              }
 
               return Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text('تعداد:'),
               Text(
-                    ProductUnitDisplayHelper.formatQuantityWithCoverage(
+                    ProductUnitDisplay.formatQuantityWithCoverage(
                       quantity: _quantity,
-                      unit: unit,
-                      productDetails: _secureProductData,
+                      apiUnit: apiUnit,
+                      calculator: calculatorMap,
                     ),
                 style: const TextStyle(fontWeight: FontWeight.bold),
               ),
