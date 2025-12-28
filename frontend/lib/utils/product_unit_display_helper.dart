@@ -3,11 +3,13 @@
 class ProductUnitDisplayHelper {
   /// Get unit from secure API response
   /// Returns the unit field directly from productDetails, or null if not available
+  /// Checks both 'unit' and 'method' fields (API may use 'method' instead of 'unit')
   static String? getUnitFromAPI(Map<String, dynamic>? productDetails) {
     if (productDetails == null) return null;
     
-    // Get unit directly from API response (top level or in calculator)
-    final unitValue = productDetails['unit'];
+    // Get unit directly from API response (top level)
+    // Check 'unit' first, then fallback to 'method' (API uses 'method' instead of 'unit' sometimes)
+    final unitValue = productDetails['unit'] ?? productDetails['method'];
     if (unitValue != null) {
       final unit = unitValue.toString().trim();
       if (unit.isNotEmpty) {
@@ -18,7 +20,8 @@ class ProductUnitDisplayHelper {
     // Check in calculator object
     final calculator = productDetails['calculator'] as Map<String, dynamic>?;
     if (calculator != null) {
-      final calcUnitValue = calculator['unit'];
+      // Check 'unit' first, then fallback to 'method'
+      final calcUnitValue = calculator['unit'] ?? calculator['method'];
       if (calcUnitValue != null) {
         final calcUnit = calcUnitValue.toString().trim();
         if (calcUnit.isNotEmpty) {
