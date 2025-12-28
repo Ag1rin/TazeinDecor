@@ -57,8 +57,7 @@ dependencies:
   # Image Picker
   image_picker: ^1.0.7
   
-  # Audio Recording
-  record: ^5.1.2
+  # Audio Recording (removed record package - not used, causing compilation errors)
   audioplayers: ^6.5.0
   
   # PDF Generation
@@ -106,13 +105,6 @@ dev_dependencies:
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
   flutter_launcher_icons: ^0.13.1
-
-# Dependency overrides to fix compatibility issues
-dependency_overrides:
-  # Fix record_web compatibility issue - use older version that doesn't require streamBufferSize
-  record_web: 1.2.1
-  record_platform_interface: 1.3.0
-  record_linux: ^1.2.1
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
