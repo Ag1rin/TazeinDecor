@@ -1,6 +1,6 @@
 /// Utility to determine product unit based on calculator data
-import 'package:frontend/models/product_model.dart'; // Added ProductModel import
-import 'package:frontend/utils/persian_number.dart';
+import '../models/product_model.dart';
+import 'persian_number.dart';
 
 class ProductUnitHelper {
   /// Format quantity with unit and area/length coverage
@@ -44,7 +44,7 @@ class ProductUnitHelper {
     String? effectiveCalculationUnit;
 
     if (productModel?.calculator != null) {
-      effectiveCalculationUnit = productModel.calculator!.detectedUnit;
+      effectiveCalculationUnit = productModel?.calculator?.detectedUnit;
     }
 
     // Determine which type of coverage to display based on the calculated coverage type
