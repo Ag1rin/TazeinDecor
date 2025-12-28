@@ -28,6 +28,28 @@ class ProductService {
     }
   }
 
+  /// Get a single category by ID from WooCommerce
+  Future<CategoryModel?> getCategoryById(int categoryId) async {
+    try {
+      final response = await _api.get('/products/categories/$categoryId');
+      if (response.statusCode == 200) {
+        return CategoryModel.fromJson(response.data);
+      }
+      if (response.statusCode == 404) {
+        print('❌ Category $categoryId not found');
+      }
+      if (response.statusCode == 403) {
+        print(
+          '❌ Access denied: Only sellers and store managers can access categories',
+        );
+      }
+      return null;
+    } catch (e) {
+      print('❌ Category fetch error: $e');
+      return null;
+    }
+  }
+
   Future<List<ProductModel>> getProducts({
     int? categoryId,
     int page = 1,

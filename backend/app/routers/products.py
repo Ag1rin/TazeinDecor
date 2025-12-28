@@ -83,21 +83,39 @@ async def get_categories(
             "پارکت",
             "پارکت لمینت",
             "کاغذ دیواری",
-            "ابزار پارکت",
-            "ابزار های پارکت",
+            "قرنیز و ابزار",
             "درب",
             "کفپوش",
             "کفپوش pvc"
         ]
         
-        # Filter categories by name
+        # Always include category ID 80 (Cornice and Tools / قرنیز و ابزار)
+        allowed_category_ids = [80]
+        
+        # Filter categories by name or ID
         filtered_categories = []
         for cat in woo_categories:
+            cat_id = cat.get("id")
             cat_name = cat.get("name", "").strip()
-            if any(allowed_name.lower() in cat_name.lower() or cat_name.lower() in allowed_name.lower() 
+            
+            # Include if ID is in allowed list OR name matches allowed names
+            if cat_id in allowed_category_ids:
+                filtered_categories.append(cat)
+                print(f"  ✓ Found category by ID: {cat_name} (ID: {cat_id})")
+            elif any(allowed_name.lower() in cat_name.lower() or cat_name.lower() in allowed_name.lower() 
                    for allowed_name in allowed_category_names):
                 filtered_categories.append(cat)
-                print(f"  ✓ Found category: {cat_name} (ID: {cat.get('id')})")
+                print(f"  ✓ Found category by name: {cat_name} (ID: {cat_id})")
+        
+        # Always fetch category ID 80 if not already in filtered list
+        if 80 not in [c.get("id") for c in filtered_categories]:
+            print("🔄 Category ID 80 not found in filtered list, fetching directly from WooCommerce...")
+            category_80 = await asyncio.to_thread(woocommerce_client.get_category, 80)
+            if category_80:
+                filtered_categories.append(category_80)
+                print(f"  ✓ Fetched category ID 80: {category_80.get('name', 'Unknown')}")
+            else:
+                print("  ⚠️  Could not fetch category ID 80 from WooCommerce")
         
         print(f"📁 Filtered to {len(filtered_categories)} allowed categories (from {len(woo_categories)} total)")
         
@@ -128,6 +146,84 @@ async def get_categories(
         raise HTTPException(
             status_code=500,
             detail=f"خطا در دریافت دسته‌بندی‌ها از ووکامرس: {str(e)}"
+        )
+
+
+@router.get("/categories/{category_id}", response_model=CategoryResponse)
+async def get_category_by_id(
+    category_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_seller_or_store_manager)
+):
+    """Get a single category by ID from WooCommerce (Seller/Store Manager only)"""
+    print(f"📁 Fetching category {category_id} - User ID: {current_user.id}, Role: {current_user.role}")
+    try:
+        # Always allow category ID 80 (Cornice and Tools / قرنیز و ابزار)
+        if category_id == 80:
+            print("✅ Category 80 (قرنیز و ابزار) is always allowed")
+        else:
+            # For other categories, check if they're in the allowed list
+            woo_categories = woocommerce_client.get_all_categories()
+            allowed_category_names = [
+                "پارکت",
+                "پارکت لمینت",
+                "کاغذ دیواری",
+                "قرنیز و ابزار",
+                "درب",
+                "کفپوش",
+                "کفپوش pvc"
+            ]
+            
+            category_found = False
+            for cat in woo_categories:
+                if cat.get("id") == category_id:
+                    cat_name = cat.get("name", "").strip()
+                    if any(allowed_name.lower() in cat_name.lower() or cat_name.lower() in allowed_name.lower() 
+                           for allowed_name in allowed_category_names):
+                        category_found = True
+                        break
+            
+            if not category_found:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"دسته‌بندی {category_id} یافت نشد یا در لیست مجاز نیست"
+                )
+        
+        # Fetch category from WooCommerce
+        category = await asyncio.to_thread(woocommerce_client.get_category, category_id)
+        
+        if not category:
+            raise HTTPException(
+                status_code=404,
+                detail=f"دسته‌بندی {category_id} در ووکامرس یافت نشد"
+            )
+        
+        # Transform and return
+        transformed_category = _transform_woo_category(category)
+        
+        # If category has children, fetch them
+        if category.get("count", 0) > 0:
+            # Fetch subcategories if any
+            woo_categories = woocommerce_client.get_all_categories()
+            children = [
+                _transform_woo_category(cat) 
+                for cat in woo_categories 
+                if cat.get("parent") == category_id
+            ]
+            transformed_category.children = children
+        
+        print(f"✅ Fetched category {category_id}: {transformed_category.name}")
+        return transformed_category
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error fetching category {category_id}: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"خطا در دریافت دسته‌بندی: {str(e)}"
         )
 
 
@@ -314,26 +410,30 @@ async def get_products(
             "پارکت",
             "پارکت لمینت",
             "کاغذ دیواری",
-            "ابزار پارکت",
-            "ابزار های پارکت",
+            "قرنیز و ابزار",
             "درب",
             "کفپوش",
             "کفپوش pvc"
         ]
         
-        # Get allowed category IDs
+        # Always include category ID 80 (Cornice and Tools / قرنیز و ابزار)
+        allowed_category_ids = [80]
+        
+        # Get allowed category IDs from WooCommerce
         woo_categories = woocommerce_client.get_all_categories()
-        allowed_category_ids = []
         category_name_to_id = {}  # Map for debugging
         for cat in woo_categories:
             cat_name = cat.get("name", "").strip()
             cat_id = cat.get("id")
             category_name_to_id[cat_name] = cat_id
             
-            if any(allowed_name.lower() in cat_name.lower() or cat_name.lower() in allowed_name.lower() 
+            # Add to allowed list if ID matches or name matches
+            if cat_id in allowed_category_ids:
+                print(f"  ✓ Allowed category by ID: {cat_name} (ID: {cat_id})")
+            elif any(allowed_name.lower() in cat_name.lower() or cat_name.lower() in allowed_name.lower() 
                    for allowed_name in allowed_category_names):
                 allowed_category_ids.append(cat_id)
-                print(f"  ✓ Allowed category: {cat_name} (ID: {cat_id})")
+                print(f"  ✓ Allowed category by name: {cat_name} (ID: {cat_id})")
         
         print(f"📋 Allowed category IDs: {allowed_category_ids}")
         
@@ -344,8 +444,11 @@ async def get_products(
         
         # If category_id is provided, validate it's in allowed list and fetch products
         if category_id:
+            # Always allow category ID 80 (Cornice and Tools / قرنیز و ابزار)
+            if category_id == 80:
+                print(f"✅ Category 80 (قرنیز و ابزار) is always allowed")
             # Validate category is allowed
-            if category_id not in allowed_category_ids:
+            elif category_id not in allowed_category_ids:
                 print(f"⚠️  Category {category_id} is not in allowed list. Allowed IDs: {allowed_category_ids}")
                 return []
             

@@ -133,26 +133,44 @@ class _ProductsHomeState extends State<ProductsHome> {
     });
 
     final categories = await _productService.getCategories();
+    
+    // Filter to only show allowed categories (must match backend)
+    final allowedCategoryNames = [
+      'پارکت',
+      'پارکت لمینت',
+      'کاغذ دیواری',
+      'قرنیز و ابزار',
+      'درب',
+      'کفپوش',
+      'کفپوش pvc',
+    ];
+    
+    // Always include category ID 80 (Cornice and Tools / قرنیز و ابزار)
+    final allowedCategoryIds = [80];
+    
+    var filteredCategories = categories.where((cat) {
+      // Include if ID is in allowed list OR name matches allowed names
+      if (allowedCategoryIds.contains(cat.id)) {
+        return true;
+      }
+      return allowedCategoryNames.any(
+        (allowed) =>
+            cat.name.toLowerCase().contains(allowed.toLowerCase()) ||
+            allowed.toLowerCase().contains(cat.name.toLowerCase()),
+      );
+    }).toList();
+    
+    // Always ensure category ID 80 is included if not already present
+    if (!filteredCategories.any((cat) => cat.id == 80)) {
+      // Try to fetch category 80 directly
+      final category80 = await _productService.getCategoryById(80);
+      if (category80 != null) {
+        filteredCategories.add(category80);
+      }
+    }
+    
     setState(() {
-      // Filter to only show allowed categories (must match backend)
-      final allowedCategoryNames = [
-        'پارکت',
-        'پارکت لمینت',
-        'کاغذ دیواری',
-        'ابزار پارکت',
-        'ابزار های پارکت',
-        'درب',
-        'کفپوش',
-        'کفپوش pvc',
-      ];
-
-      _categories = categories.where((cat) {
-        return allowedCategoryNames.any(
-          (allowed) =>
-              cat.name.toLowerCase().contains(allowed.toLowerCase()) ||
-              allowed.toLowerCase().contains(cat.name.toLowerCase()),
-        );
-      }).toList();
+      _categories = filteredCategories;
 
       // Set first category as default if available
       if (_categories.isNotEmpty) {

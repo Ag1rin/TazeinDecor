@@ -87,6 +87,26 @@ class WooCommerceClient:
         except Exception as e:
             print(f"Error fetching product {product_id}: {e}")
             return None
+
+    def get_category(self, category_id: int) -> Optional[Dict]:
+        """Get single category by ID"""
+        try:
+            response = requests.get(
+                f"{self.api_url}/products/categories/{category_id}",
+                auth=self._get_auth(),
+                timeout=30
+            )
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            print(f"❌ Error fetching category {category_id}: {e}")
+            if hasattr(e, "response") and e.response is not None:
+                print(f"   Response status: {e.response.status_code}")
+                print(f"   Response body: {e.response.text[:500]}")
+            return None
+        except Exception as e:
+            print(f"❌ Unexpected error fetching category: {e}")
+            return None
     
     def get_all_categories(self) -> List[Dict]:
         """Get all categories with pagination"""
