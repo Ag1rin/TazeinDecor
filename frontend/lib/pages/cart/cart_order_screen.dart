@@ -592,25 +592,61 @@ class _CartOrderScreenState extends State<CartOrderScreen> {
                     if (cartProvider.items.any(
                       (item) => item.product.colleaguePrice != null,
                     ))
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text(
-                            'جمع کل:',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          Text(
-                            '${PersianNumber.formatPrice(cartProvider.totalAmount)} تومان',
-                            style: const TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.primaryBlue,
-                            ),
-                          ),
-                        ],
+                      Consumer<AuthProvider>(
+                        builder: (context, authProvider, _) {
+                          final user = authProvider.user;
+                          // Calculate total with discounts applied
+                          final total = cartProvider.items.fold<double>(
+                            0.0,
+                            (sum, item) {
+                              final basePrice = item.product.displayPrice ?? 0.0;
+                              // Apply discount if user has discount percentage
+                              double finalPrice = basePrice;
+                              if (user?.discountPercentage != null && user!.discountPercentage! > 0) {
+                                final discountAmount = basePrice * (user.discountPercentage! / 100.0);
+                                finalPrice = basePrice - discountAmount;
+                              }
+                              return sum + (finalPrice * item.quantity);
+                            },
+                          );
+                          
+                          return Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text(
+                                'جمع کل:',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  Text(
+                                    '${PersianNumber.formatPrice(total)} تومان',
+                                    style: const TextStyle(
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.bold,
+                                      color: AppColors.primaryBlue,
+                                    ),
+                                  ),
+                                  if (user?.discountPercentage != null && user!.discountPercentage! > 0) ...[
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      '${user.discountPercentage!.toStringAsFixed(0)}% تخفیف اعمال شده',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.green[700],
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ],
+                          );
+                        },
                       ),
                     const SizedBox(height: 24),
                     // Customer info
@@ -744,24 +780,39 @@ class _CartOrderScreenState extends State<CartOrderScreen> {
                           child: Consumer<AuthProvider>(
                             builder: (context, authProvider, _) {
                               final user = authProvider.user;
+                              // Show credit option for sellers and store managers
+                              final isSellerOrStoreManager = user?.isSeller == true || user?.isStoreManager == true;
                               final creditBalance = user?.credit ?? 0.0;
                               final cartProvider = Provider.of<CartProvider>(
                                 context,
                                 listen: false,
                               );
+                              // Calculate total with discounts applied (cooperation price after discount)
                               final total = cartProvider.items.fold<double>(
                                 0.0,
-                                (sum, item) =>
-                                    sum +
-                                    ((item.product.displayPrice ?? 0.0) *
-                                        item.quantity),
+                                (sum, item) {
+                                  final basePrice = item.product.displayPrice ?? 0.0;
+                                  // Apply discount if user has discount percentage
+                                  double finalPrice = basePrice;
+                                  if (user?.discountPercentage != null && user!.discountPercentage! > 0) {
+                                    final discountAmount = basePrice * (user.discountPercentage! / 100.0);
+                                    finalPrice = basePrice - discountAmount;
+                                  }
+                                  return sum + (finalPrice * item.quantity);
+                                },
                               );
                               final hasEnoughCredit = creditBalance >= total;
 
+                              // Only show credit option for sellers and store managers
+                              if (!isSellerOrStoreManager) {
+                                return const SizedBox.shrink();
+                              }
+
                               return _buildMethodCard(
                                 title: 'پرداخت اعتباری',
-                                subtitle:
-                                    'موجودی: ${PersianNumber.formatPrice(creditBalance)}',
+                                subtitle: hasEnoughCredit
+                                    ? 'موجودی: ${PersianNumber.formatPrice(creditBalance)}'
+                                    : 'اعتبار کافی نیست',
                                 value: 'credit',
                                 groupValue: _paymentMethod,
                                 icon: Icons.credit_card,
@@ -1056,9 +1107,41 @@ class _CartOrderScreenState extends State<CartOrderScreen> {
                   // If no cooperation price, hide price completely
                   if (item.product.colleaguePrice != null) ...[
                     const SizedBox(height: 4),
-                    Text(
-                      'قیمت همکاری: ${PersianNumber.formatPrice(item.product.colleaguePrice!)} تومان',
-                      style: const TextStyle(color: AppColors.primaryBlue),
+                    Builder(
+                      builder: (context) {
+                        final user = Provider.of<AuthProvider>(context, listen: false).user;
+                        final basePrice = item.product.colleaguePrice!;
+                        double finalPrice = basePrice;
+                        String? discountText;
+                        
+                        // Apply discount if user has discount percentage
+                        if (user?.discountPercentage != null && user!.discountPercentage! > 0) {
+                          final discountAmount = basePrice * (user.discountPercentage! / 100.0);
+                          finalPrice = basePrice - discountAmount;
+                          discountText = '(${user.discountPercentage!.toStringAsFixed(0)}% تخفیف)';
+                        }
+                        
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'قیمت همکاری: ${PersianNumber.formatPrice(finalPrice)} تومان',
+                              style: const TextStyle(color: AppColors.primaryBlue),
+                            ),
+                            if (discountText != null) ...[
+                              const SizedBox(height: 2),
+                              Text(
+                                discountText,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.green[700],
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ],
+                        );
+                      },
                     ),
                   ],
                   const SizedBox(height: 4),

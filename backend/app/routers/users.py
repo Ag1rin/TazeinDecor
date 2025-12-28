@@ -146,11 +146,11 @@ async def update_user_credit(
     if not user:
         raise HTTPException(status_code=404, detail="کاربر یافت نشد")
     
-    # Only allow credit for sellers
-    if user.role != UserRole.SELLER:
+    # Allow credit for sellers and store managers
+    if user.role not in [UserRole.SELLER, UserRole.STORE_MANAGER]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="اعتبار فقط برای فروشندگان قابل تنظیم است"
+            detail="اعتبار فقط برای فروشندگان و مدیران فروشگاه قابل تنظیم است"
         )
     
     user.credit = credit

@@ -255,7 +255,8 @@ async def create_order(
         
         # Deduct credit using wholesale price (actual seller payment)
         current_user.credit -= wholesale_total
-        print(f"✅ Deducted {wholesale_total:.0f} (wholesale) from seller {current_user.id} credit. Remaining: {current_user.credit:.0f}")
+        userRole = "seller" if current_user.role == UserRole.SELLER else "store manager"
+        print(f"✅ Deducted {wholesale_total:.0f} (wholesale) from {userRole} {current_user.id} credit. Remaining: {current_user.credit:.0f}")
     
     # Look up referrer by referral code if provided
     referrer_id = None
@@ -488,11 +489,13 @@ async def create_pending_order_for_payment(
             except (ValueError, TypeError):
                 variation_id = None
         
+        # For online payment, use wholesale price (cooperation price) instead of retail price
+        # This ensures users pay the cooperation price shown in the app
         woo_line_item = {
             "product_id": woo_product_id,
             "quantity": max(1, int(round(item_data.quantity))),
-            "subtotal": str(retail_item_total),
-            "total": str(retail_item_total),
+            "subtotal": str(wholesale_item_total),  # Use cooperation price
+            "total": str(wholesale_item_total),  # Use cooperation price
             "meta_data": line_meta
         }
         
