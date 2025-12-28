@@ -44,9 +44,36 @@ class _ProductsHomeState extends State<ProductsHome> {
   @override
   void initState() {
     super.initState();
-    _loadCategories();
-    _loadProducts();
     _scrollController.addListener(_onScroll);
+    // Auto-load products when page is initialized
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _autoLoadProducts();
+      }
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Auto-load products when page becomes visible (e.g., returning from another screen)
+    // Only load if products list is empty to avoid unnecessary reloads
+    if (_products.isEmpty && !_isLoading) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _autoLoadProducts();
+        }
+      });
+    }
+  }
+
+  /// Auto-load products and categories automatically
+  Future<void> _autoLoadProducts() async {
+    if (_isLoading) return; // Prevent multiple simultaneous loads
+    
+    // Load categories first, then products
+    await _loadCategories();
+    await _loadProducts();
   }
 
   @override

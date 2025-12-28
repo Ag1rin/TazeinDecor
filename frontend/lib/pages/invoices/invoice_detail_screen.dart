@@ -1714,8 +1714,6 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     return Consumer<AuthProvider>(
       builder: (context, authProvider, _) {
         final user = authProvider.user;
-        final isAdminOrOperator =
-            user?.isOperator == true || user?.isAdmin == true;
         
         // Calculate the sum of all line items using colleaguePrice (cooperation price)
         // This ensures the grand total matches the sum of displayed line item totals
@@ -1750,7 +1748,8 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
         }
         
         // Use calculated subtotal (sum of line items) as the base amount
-        final baseAmount = calculatedSubtotal > 0 ? calculatedSubtotal : (invoice.wholesaleAmount ?? invoice.totalAmount);
+        // Only use wholesaleAmount (cooperation price), never retail price
+        final baseAmount = calculatedSubtotal > 0 ? calculatedSubtotal : (invoice.wholesaleAmount ?? 0.0);
         final taxAmount = invoice.taxAmount;
         final discountAmount = invoice.discountAmount;
         
@@ -1771,16 +1770,6 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
               _buildTotalRow('تخفیف:', discountAmount, isPositive: false),
             const Divider(),
             _buildTotalRow('مبلغ نهایی:', grandTotal, isGrandTotal: true),
-                // Show retail price for admin/operator reference only
-                if (isAdminOrOperator && invoice.totalAmount != baseAmount) ...[
-                  const Divider(),
-                  _buildTotalRow(
-                    'قیمت خرده‌فروشی (مرجع):',
-                    invoice.totalAmount,
-                    isGrandTotal: false,
-                    isWholesale: false,
-                  ),
-                ],
           ],
         ),
       ),

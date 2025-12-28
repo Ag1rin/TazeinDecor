@@ -255,13 +255,6 @@ class _ReturnRequestScreenState extends State<ReturnRequestScreen> {
                         'تاریخ سفارش: ${PersianDate.formatDateTime(order.createdAt)}',
                       ),
                       // Use grand total (cooperation price with tax/discount) for consistency
-                      Text(
-                        'مبلغ کل: ${PersianNumber.formatPrice(OrderTotalCalculator.calculateGrandTotal(order))} تومان',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.primaryBlue,
-                        ),
-                      ),
                     ],
                   ),
                 ),

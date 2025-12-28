@@ -206,4 +206,22 @@ class AuthService {
       return AppConfig.appVersion;
     }
   }
+
+  /// Get current user from backend (refreshed data including updated credit)
+  Future<UserModel?> refreshCurrentUser() async {
+    try {
+      final response = await _api.get('/auth/me');
+      if (response.statusCode == 200) {
+        final user = UserModel.fromJson(response.data);
+        // Update stored user data
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('user', jsonEncode(response.data));
+        return user;
+      }
+      return null;
+    } catch (e) {
+      print('❌ Error refreshing user: $e');
+      return null;
+    }
+  }
 }

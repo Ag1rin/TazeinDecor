@@ -5,16 +5,17 @@ import '../models/order_model.dart';
 
 class OrderTotalCalculator {
   /// Calculate the grand total for an order/invoice
-  /// This matches the calculation in Invoice Detail Screen
-  /// 
-  /// The calculation:
-  /// 1. Sum all item.total values (which store cooperation price totals from backend)
-  /// 2. Add taxAmount
-  /// 3. Subtract discountAmount
+  /// Uses cooperation_total_amount from database (calculated from calculator) if available
+  /// Otherwise calculates: sum of item.total + tax - discount
   /// 
   /// This ensures consistency across all screens (list views, detail views, etc.)
   static double calculateGrandTotal(OrderModel order) {
-    // Calculate subtotal from item totals (cooperation prices from backend)
+    // First, try to use cooperation_total_amount from database (calculated from calculator)
+    if (order.cooperationTotalAmount != null && order.cooperationTotalAmount! > 0) {
+      return order.cooperationTotalAmount!;
+    }
+    
+    // Fallback: Calculate from item totals (cooperation prices from backend)
     double calculatedSubtotal = 0.0;
     
     if (order.items.isNotEmpty) {
@@ -26,10 +27,11 @@ class OrderTotalCalculator {
       );
     }
     
-    // Use calculated subtotal if available, otherwise fall back to wholesaleAmount or totalAmount
+    // Use calculated subtotal if available, otherwise fall back to wholesaleAmount only
+    // Never use retail price (totalAmount) - only cooperation price
     final baseAmount = calculatedSubtotal > 0 
         ? calculatedSubtotal 
-        : (order.wholesaleAmount ?? order.totalAmount);
+        : (order.wholesaleAmount ?? 0.0);
     
     // Calculate final total: baseAmount + tax - discount (same as invoice detail screen)
     // Note: order.discountAmount is order-level discount, not user percentage discount
@@ -52,10 +54,11 @@ class OrderTotalCalculator {
       );
     }
     
-    // Use calculated subtotal if available, otherwise fall back to wholesaleAmount or totalAmount
+    // Use calculated subtotal if available, otherwise fall back to wholesaleAmount only
+    // Never use retail price (totalAmount) - only cooperation price
     return calculatedSubtotal > 0 
         ? calculatedSubtotal 
-        : (order.wholesaleAmount ?? order.totalAmount);
+        : (order.wholesaleAmount ?? 0.0);
   }
 }
 

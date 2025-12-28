@@ -317,6 +317,7 @@ class Order(Base):
     installation_notes = Column(Text, nullable=True)
     total_amount = Column(Float, nullable=False, default=0.0)  # Retail price (customer price)
     wholesale_amount = Column(Float, nullable=True)  # Wholesale/cooperation price (seller payment)
+    cooperation_total_amount = Column(Float, nullable=True)  # Calculated total from calculator (sum of item.total + tax - discount)
     notes = Column(Text, nullable=True)
     is_new = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

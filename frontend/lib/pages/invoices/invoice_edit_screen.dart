@@ -40,7 +40,7 @@ class _InvoiceEditScreenState extends State<InvoiceEditScreen> {
       text: widget.invoice.invoiceNumber ?? widget.invoice.orderNumber,
     );
     _subtotalController = TextEditingController(
-      text: (widget.invoice.subtotal ?? widget.invoice.totalAmount).toString(),
+      text: (widget.invoice.subtotal ?? widget.invoice.wholesaleAmount ?? 0.0).toString(),
     );
     _taxAmountController = TextEditingController(
       text: widget.invoice.taxAmount.toString(),

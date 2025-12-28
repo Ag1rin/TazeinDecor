@@ -26,6 +26,7 @@ class OrderModel {
   final String? installationNotes;
   final double totalAmount;  // Retail price (customer price)
   final double? wholesaleAmount;  // Wholesale/cooperation price (seller payment)
+  final double? cooperationTotalAmount;  // Calculated total from calculator (sum of item.total + tax - discount)
   final String? notes;
   final bool isNew;
   final DateTime createdAt;
@@ -61,6 +62,7 @@ class OrderModel {
     this.installationNotes,
     required this.totalAmount,
     this.wholesaleAmount,
+    this.cooperationTotalAmount,
     this.notes,
     required this.isNew,
     required this.createdAt,
@@ -116,8 +118,9 @@ class OrderModel {
   }
   
   // Get the payable amount (cooperation price with discounts applied)
+  // Use cooperation_total_amount (calculated from calculator) if available
   double get payableAmount {
-    return wholesaleAmount ?? totalAmount;
+    return cooperationTotalAmount ?? wholesaleAmount ?? totalAmount;
   }
 
   factory OrderModel.fromJson(Map<String, dynamic> json) {
@@ -149,6 +152,9 @@ class OrderModel {
       totalAmount: _safeToDouble(json['total_amount']),
       wholesaleAmount: json['wholesale_amount'] != null
           ? _safeToDouble(json['wholesale_amount'])
+          : null,
+      cooperationTotalAmount: json['cooperation_total_amount'] != null
+          ? _safeToDouble(json['cooperation_total_amount'])
           : null,
       notes: json['notes'],
       isNew: json['is_new'] ?? false,

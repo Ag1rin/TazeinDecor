@@ -66,5 +66,33 @@ class AuthProvider with ChangeNotifier {
     _user = user;
     notifyListeners();
   }
+
+  /// Refresh user data from backend (for real-time credit updates)
+  Future<void> refreshUser() async {
+    final user = await _authService.refreshCurrentUser();
+    if (user != null) {
+      _user = user;
+      notifyListeners();
+    }
+  }
+
+  /// Update credit locally (for real-time updates without backend call)
+  void updateCredit(double newCredit) {
+    if (_user != null) {
+      _user = UserModel(
+        id: _user!.id,
+        username: _user!.username,
+        fullName: _user!.fullName,
+        mobile: _user!.mobile,
+        role: _user!.role,
+        credit: newCredit,
+        storeAddress: _user!.storeAddress,
+        isActive: _user!.isActive,
+        discountPercentage: _user!.discountPercentage,
+        discountCategoryIds: _user!.discountCategoryIds,
+      );
+      notifyListeners();
+    }
+  }
 }
 

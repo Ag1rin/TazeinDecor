@@ -207,6 +207,14 @@ class _CartOrderScreenState extends State<CartOrderScreen> {
 
         if (order != null) {
           cartProvider.clearCart();
+          
+          // Update credit in real-time if payment was with credit
+          if (_paymentMethod == 'credit') {
+            final authProvider = Provider.of<AuthProvider>(context, listen: false);
+            // Refresh user data from backend to get updated credit
+            await authProvider.refreshUser();
+          }
+          
           Fluttertoast.showToast(
             msg: 'سفارش با موفقیت ثبت شد',
             toastLength: Toast.LENGTH_LONG,
@@ -330,6 +338,16 @@ class _CartOrderScreenState extends State<CartOrderScreen> {
       if (order != null) {
         // Order successfully registered
         cartProvider.clearCart();
+        
+        // Update credit in real-time if payment was with credit
+        final authProvider = Provider.of<AuthProvider>(context, listen: false);
+        // Check if original order was credit payment
+        final originalPaymentMethod = originalOrderData['payment_method'];
+        if (originalPaymentMethod == 'credit') {
+          // Refresh user data from backend to get updated credit
+          await authProvider.refreshUser();
+        }
+        
         _showPaymentSuccessDialog(result, order);
       } else {
         // Verification failed

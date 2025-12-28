@@ -5,12 +5,10 @@ import 'package:provider/provider.dart';
 import '../../providers/invoice_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../models/order_model.dart';
-import '../../utils/persian_number.dart';
 import '../../utils/persian_date.dart';
 import '../../utils/app_colors.dart';
 import '../../utils/status_labels.dart';
 import '../../utils/jalali_date.dart';
-import '../../utils/order_total_calculator.dart';
 import '../../widgets/jalali_date_picker.dart';
 import '../../services/order_service.dart';
 import '../../services/aggregated_pdf_service.dart';
@@ -350,31 +348,6 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                       ),
                     ),
                   ],
-                ),
-                const SizedBox(height: 12),
-                // Calculate total using same logic as invoice detail screen
-                Builder(
-                  builder: (context) {
-                    final finalTotal = OrderTotalCalculator.calculateGrandTotal(invoice);
-                    
-                    return Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'مبلغ کل:',
-                          style: TextStyle(fontSize: 14, color: Colors.grey[700]),
-                        ),
-                        Text(
-                          '${PersianNumber.formatPrice(finalTotal)} تومان',
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.primaryBlue,
-                          ),
-                        ),
-                      ],
-                    );
-                  },
                 ),
                 if (invoice.dueDate != null) ...[
                   const SizedBox(height: 8),

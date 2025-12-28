@@ -146,8 +146,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   padding: const EdgeInsets.only(top: 6),
                                   child: _infoRow('آدرس', user.storeAddress!),
                                 ),
-                              // Show credit for sellers
-                              if (user.role == 'seller')
+                              // Show credit for sellers and store managers
+                              if (user.role == 'seller' || user.role == 'store_manager')
                                 Padding(
                                   padding: const EdgeInsets.only(top: 12),
                                   child: Container(

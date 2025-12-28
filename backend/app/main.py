@@ -331,6 +331,21 @@ async def lifespan(app: FastAPI):
                             print(f"⚠️  Could not add wholesale_amount: {e}")
                 else:
                     print("ℹ️  Column wholesale_amount already exists in orders table")
+                
+                # Migration 10: Add cooperation_total_amount to orders
+                if "cooperation_total_amount" not in order_columns:
+                    try:
+                        with engine.begin() as conn:
+                            if is_postgres:
+                                conn.execute(text("ALTER TABLE orders ADD COLUMN IF NOT EXISTS cooperation_total_amount DOUBLE PRECISION"))
+                            else:
+                                conn.execute(text("ALTER TABLE orders ADD COLUMN cooperation_total_amount REAL"))
+                            print("✅ Added cooperation_total_amount column to orders")
+                    except Exception as e:
+                        if "already exists" not in str(e).lower() and "duplicate" not in str(e).lower():
+                            print(f"⚠️  Could not add cooperation_total_amount: {e}")
+                else:
+                    print("ℹ️  Column cooperation_total_amount already exists in orders table")
                         
         except ImportError as import_error:
             # Migration file might not be accessible, that's okay

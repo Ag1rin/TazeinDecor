@@ -124,9 +124,15 @@ async def create_order(
         # Get retail price from WooCommerce product (for WooCommerce order)
         retail_price = float(woo_product.get('price', 0))
         
-        # Get wholesale price from frontend (item_data.price is colleague_price)
-        # This is the actual price the seller pays
-        wholesale_price = float(item_data.price) if item_data.price else retail_price
+        # Get wholesale price from frontend (item_data.price is colleague_price from API midia)
+        # This is the actual price the seller pays (cooperation price)
+        # IMPORTANT: ALWAYS use cooperation price - never fall back to retail price
+        if not item_data.price or item_data.price <= 0:
+            raise HTTPException(
+                status_code=400,
+                detail=f"قیمت همکاری برای محصول {woo_product_id} یافت نشد. لطفا دوباره تلاش کنید."
+            )
+        wholesale_price = float(item_data.price)  # This is colleague_price from API midia
         
         # Apply user discount if applicable
         # Get product categories from WooCommerce
@@ -312,6 +318,7 @@ async def create_order(
     
     # Create order items in local DB (for tracking, using WooCommerce IDs)
     # Store wholesale prices in order items (actual seller payment)
+    item_totals_sum = 0.0  # Sum of all item.total (calculator results)
     for i, item_data in enumerate(order_data.items):
         woo_item = woo_line_items[i]
         # Calculate unit price safely
@@ -329,11 +336,20 @@ async def create_order(
             quantity=item_data.quantity,
             unit=item_data.unit,
             price=unit_price,  # Wholesale unit price
-            total=item_total,  # Wholesale total
+            total=item_total,  # Wholesale total (calculator result)
             variation_id=item_data.variation_id,
             variation_pattern=item_data.variation_pattern
         )
         db.add(order_item)
+        item_totals_sum += item_total  # Sum all item totals (calculator results)
+    
+    # Calculate cooperation_total_amount: sum of item.total (from calculator) + tax - discount
+    # This is the final total that should be displayed everywhere
+    tax_amount = order_data.tax_amount if hasattr(order_data, 'tax_amount') and order_data.tax_amount else 0.0
+    discount_amount = order_data.discount_amount if hasattr(order_data, 'discount_amount') and order_data.discount_amount else 0.0
+    cooperation_total_amount = item_totals_sum + tax_amount - discount_amount
+    order.cooperation_total_amount = cooperation_total_amount
+    print(f"✅ Calculated cooperation_total_amount: {cooperation_total_amount:.0f} (items: {item_totals_sum:.0f}, tax: {tax_amount:.0f}, discount: {discount_amount:.0f})")
     
     try:
         db.commit()
@@ -446,7 +462,15 @@ async def create_pending_order_for_payment(
             )
         
         retail_price = float(woo_product.get('price', 0))
-        wholesale_price = float(item_data.price) if item_data.price else retail_price
+        # IMPORTANT: For online payment, ALWAYS use cooperation price (colleague_price) from frontend
+        # Frontend sends colleague_price in item_data.price (from API midia)
+        # This ensures users pay the cooperation price shown in the app, not the retail price
+        if not item_data.price or item_data.price <= 0:
+            raise HTTPException(
+                status_code=400,
+                detail=f"قیمت همکاری برای محصول {woo_product_id} یافت نشد. لطفا دوباره تلاش کنید."
+            )
+        wholesale_price = float(item_data.price)  # This is colleague_price from API midia
         
         # Apply user discount if applicable
         product_categories = woo_product.get('categories', [])
@@ -700,6 +724,7 @@ async def verify_payment_and_register_order(
         db.add(installation)
     
     # Create order items from original order data (to preserve wholesale prices)
+    item_totals_sum = 0.0  # Sum of all item.total (calculator results)
     for item_data in order_data.items:
         # Get retail price from WooCommerce for reference
         woo_product = woocommerce_client.get_product(item_data.product_id)
@@ -739,11 +764,19 @@ async def verify_payment_and_register_order(
             quantity=item_data.quantity,
             unit=item_data.unit,
             price=unit_price,
-            total=item_total,
+            total=item_total,  # Calculator result
             variation_id=item_data.variation_id,
             variation_pattern=item_data.variation_pattern
         )
         db.add(order_item)
+        item_totals_sum += item_total  # Sum all item totals (calculator results)
+    
+    # Calculate cooperation_total_amount: sum of item.total (from calculator) + tax - discount
+    tax_amount = order.tax_amount if order.tax_amount else 0.0
+    discount_amount = order.discount_amount if order.discount_amount else 0.0
+    cooperation_total_amount = item_totals_sum + tax_amount - discount_amount
+    order.cooperation_total_amount = cooperation_total_amount
+    print(f"✅ Calculated cooperation_total_amount: {cooperation_total_amount:.0f} (items: {item_totals_sum:.0f}, tax: {tax_amount:.0f}, discount: {discount_amount:.0f})")
     
     try:
         db.commit()
@@ -1331,6 +1364,7 @@ async def search_invoices(
                     'installation_notes': order.installation_notes,
                     'total_amount': order.total_amount,
                     'wholesale_amount': getattr(order, 'wholesale_amount', None),  # Handle missing column gracefully
+                    'cooperation_total_amount': getattr(order, 'cooperation_total_amount', None),  # Handle missing column gracefully
                     'notes': order.notes,
                     'is_new': order.is_new,
                     'created_at': order.created_at,
@@ -1367,6 +1401,9 @@ async def search_invoices(
                     # Ensure wholesale_amount exists (set to None if missing)
                     if 'wholesale_amount' not in order_data:
                         order_data['wholesale_amount'] = None
+                    # Ensure cooperation_total_amount exists (set to None if missing)
+                    if 'cooperation_total_amount' not in order_data:
+                        order_data['cooperation_total_amount'] = None
                     result.append(OrderResponse.model_validate(order_data))
                 except Exception as e2:
                     print(f"❌ Failed to validate order {order.id}: {e2}")

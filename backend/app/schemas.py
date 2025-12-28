@@ -169,6 +169,7 @@ class OrderResponse(BaseModel):
     installation_notes: Optional[str]
     total_amount: float  # Retail price (customer price)
     wholesale_amount: Optional[float] = None  # Wholesale/cooperation price (seller payment)
+    cooperation_total_amount: Optional[float] = None  # Calculated total from calculator (sum of item.total + tax - discount)
     notes: Optional[str]
     is_new: bool
     created_at: datetime
