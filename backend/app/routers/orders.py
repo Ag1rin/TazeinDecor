@@ -97,10 +97,14 @@ async def create_order(
         db.add(customer)
         db.flush()
     
-    # Calculate totals - use wholesale price from frontend (colleague_price) for seller payment
-    # and retail price from WooCommerce for customer reference
-    total = 0.0  # Retail total (for WooCommerce)
-    wholesale_total = 0.0  # Wholesale total (actual seller payment)
+    # Calculate totals - ALWAYS use cooperation price (colleague_price) for seller payment
+    # IMPORTANT: All calculations, payments, and invoices must use cooperation price
+    # - Frontend sends colleague_price in item_data.price
+    # - Discounts are applied to cooperation price (not retail price)
+    # - wholesale_total is the final payable amount (cooperation price with discounts)
+    # - This ensures consistency: what user sees = what is calculated = what is charged
+    total = 0.0  # Retail total (for WooCommerce reference only, NOT used for payment)
+    wholesale_total = 0.0  # Cooperation price total (actual seller payment - used everywhere)
     woo_line_items = []
     
     for item_data in order_data.items:
@@ -142,11 +146,13 @@ async def create_order(
         if not applicable_discount:
             applicable_discount = _get_user_discount_for_category(db, current_user.id, None)
         
-        # Apply discount to wholesale price (seller payment)
+        # Apply discount to cooperation price (wholesale_price)
+        # IMPORTANT: Discounts are ALWAYS applied to cooperation price, never to retail price
+        # This ensures the discount percentage shown in the app matches the actual discount applied
         if applicable_discount and applicable_discount.discount_percentage > 0:
             discount_amount = wholesale_price * (applicable_discount.discount_percentage / 100.0)
             wholesale_price = wholesale_price - discount_amount
-            print(f"✅ Applied {applicable_discount.discount_percentage}% discount to product {woo_product_id}. Original: {float(item_data.price) if item_data.price else retail_price}, Discounted: {wholesale_price}")
+            print(f"✅ Applied {applicable_discount.discount_percentage}% discount to cooperation price for product {woo_product_id}. Original: {float(item_data.price) if item_data.price else retail_price}, Discounted: {wholesale_price}")
         
         # If variation_id is provided, get variation price
         if item_data.variation_id:
@@ -457,6 +463,8 @@ async def create_pending_order_for_payment(
         if not applicable_discount:
             applicable_discount = _get_user_discount_for_category(db, current_user.id, None)
         
+        # Apply discount to cooperation price (wholesale_price)
+        # IMPORTANT: Discounts are ALWAYS applied to cooperation price, never to retail price
         if applicable_discount and applicable_discount.discount_percentage > 0:
             discount_amount = wholesale_price * (applicable_discount.discount_percentage / 100.0)
             wholesale_price = wholesale_price - discount_amount
@@ -716,6 +724,8 @@ async def verify_payment_and_register_order(
             if not applicable_discount:
                 applicable_discount = _get_user_discount_for_category(db, current_user.id, None)
             
+            # Apply discount to cooperation price (wholesale_price)
+            # IMPORTANT: Discounts are ALWAYS applied to cooperation price, never to retail price
             if applicable_discount and applicable_discount.discount_percentage > 0:
                 discount_amount = wholesale_price * (applicable_discount.discount_percentage / 100.0)
                 wholesale_price = wholesale_price - discount_amount

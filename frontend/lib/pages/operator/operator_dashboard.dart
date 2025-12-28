@@ -447,7 +447,7 @@ class _OperatorDashboardState extends State<OperatorDashboard>
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    '${PersianNumber.formatPrice(order.totalAmount)} تومان',
+                    '${PersianNumber.formatPrice(order.payableAmount)} تومان',
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,

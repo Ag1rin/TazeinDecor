@@ -899,8 +899,11 @@ class AggregatedPdfService {
   }
 
   static pw.Widget _buildSingleTotals(OrderModel invoice) {
-    final subtotal = invoice.subtotal ?? invoice.totalAmount;
-    final grandTotal = invoice.grandTotal;
+    // ALWAYS use wholesaleAmount (cooperation price) for calculations
+    // This ensures PDF invoices show the actual amount the seller pays
+    final baseAmount = invoice.wholesaleAmount ?? invoice.totalAmount;
+    final subtotal = invoice.subtotal ?? baseAmount;
+    final grandTotal = invoice.grandTotal; // This now uses wholesaleAmount internally
 
     return pw.Container(
       padding: const pw.EdgeInsets.all(12),

@@ -1669,38 +1669,43 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
   }
 
   Widget _buildTotals() {
-    final subtotal = invoice.subtotal ?? invoice.totalAmount;
-    final taxAmount = invoice.taxAmount;
-    final discountAmount = invoice.discountAmount;
-    final grandTotal = invoice.grandTotal;
-
     return Consumer<AuthProvider>(
       builder: (context, authProvider, _) {
         final user = authProvider.user;
         final isAdminOrOperator =
             user?.isOperator == true || user?.isAdmin == true;
-        final wholesaleAmount = invoice.wholesaleAmount;
+        
+        // ALWAYS use wholesaleAmount (cooperation price) as the primary amount
+        // This is the actual amount the seller pays
+        final baseAmount = invoice.wholesaleAmount ?? invoice.totalAmount;
+        final taxAmount = invoice.taxAmount;
+        final discountAmount = invoice.discountAmount;
+        
+        // Calculate final total using cooperation price
+        // Note: Discounts are already applied to wholesaleAmount in backend
+        // So we just need to add tax if any
+        final grandTotal = baseAmount + taxAmount - discountAmount;
 
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            _buildTotalRow('جمع کل:', subtotal),
+            _buildTotalRow('جمع کل:', baseAmount),
             if (taxAmount > 0)
               _buildTotalRow('مالیات:', taxAmount, isPositive: true),
             if (discountAmount > 0)
               _buildTotalRow('تخفیف:', discountAmount, isPositive: false),
             const Divider(),
             _buildTotalRow('مبلغ نهایی:', grandTotal, isGrandTotal: true),
-                // Show wholesale price for admin/operator
-                if (isAdminOrOperator && wholesaleAmount != null) ...[
+                // Show retail price for admin/operator reference only
+                if (isAdminOrOperator && invoice.totalAmount != baseAmount) ...[
                   const Divider(),
                   _buildTotalRow(
-                    'مبلغ عمده‌فروشی (همکاری):',
-                    wholesaleAmount,
+                    'قیمت خرده‌فروشی (مرجع):',
+                    invoice.totalAmount,
                     isGrandTotal: false,
-                    isWholesale: true,
+                    isWholesale: false,
                   ),
                 ],
           ],

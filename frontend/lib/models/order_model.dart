@@ -106,9 +106,18 @@ class OrderModel {
   }
 
   // Calculate grand total
+  // ALWAYS use wholesaleAmount (cooperation price) as the base for calculations
+  // This ensures consistency with what the seller actually pays
   double get grandTotal {
-    final sub = subtotal ?? totalAmount;
+    // Use wholesaleAmount if available (cooperation price), otherwise fall back to totalAmount
+    final baseAmount = wholesaleAmount ?? totalAmount;
+    final sub = subtotal ?? baseAmount;
     return sub + taxAmount - discountAmount;
+  }
+  
+  // Get the payable amount (cooperation price with discounts applied)
+  double get payableAmount {
+    return wholesaleAmount ?? totalAmount;
   }
 
   factory OrderModel.fromJson(Map<String, dynamic> json) {
