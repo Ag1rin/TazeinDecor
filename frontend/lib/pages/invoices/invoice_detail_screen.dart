@@ -1282,10 +1282,8 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     final calculator = productDetails?['calculator'] as Map<String, dynamic>?;
     final apiUnit = ProductUnitDisplay.getUnitFromCalculator(calculator);
 
-    // Calculate line total (quantity × wholesale price if available, otherwise use item total)
-    final lineTotal = colleaguePrice != null
-        ? quantity * colleaguePrice
-        : item.total;
+    // Note: Line total will be calculated in the Consumer below with user discounts applied
+    // This ensures consistency with the totals calculation
 
     return Consumer<AuthProvider>(
       builder: (context, authProvider, _) {
@@ -1602,15 +1600,37 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
                             ),
                           ),
                           const SizedBox(height: 4),
-                          // ALWAYS use lineTotal calculated from colleaguePrice
+                          // ALWAYS use lineTotal calculated from colleaguePrice with discounts
                           if (colleaguePrice != null)
-                            Text(
-                              PersianNumber.formatPrice(lineTotal),
-                style: const TextStyle(
-                                fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                                color: AppColors.primaryBlue,
-                              ),
+                            Builder(
+                              builder: (context) {
+                                // Apply discount if user has discount percentage (same as totals calculation)
+                                if (colleaguePrice == null) {
+                                  return Text(
+                                    PersianNumber.formatPrice(item.total),
+                                    style: const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      color: AppColors.primaryBlue,
+                                    ),
+                                  );
+                                }
+                                double finalPrice = colleaguePrice;
+                                if (user?.discountPercentage != null && user!.discountPercentage! > 0) {
+                                  final discountAmount = colleaguePrice * (user.discountPercentage! / 100.0);
+                                  finalPrice = colleaguePrice - discountAmount;
+                                }
+                                final adjustedLineTotal = finalPrice * quantity;
+                                
+                                return Text(
+                                  PersianNumber.formatPrice(adjustedLineTotal),
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.primaryBlue,
+                                  ),
+                                );
+                              },
                             )
                           else
                             const Text(
@@ -1643,13 +1663,35 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
                                     ),
                                   ),
                                   const SizedBox(height: 2),
-                                  Text(
-                                    PersianNumber.formatPrice(lineTotal),
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      color: Colors.green[700],
-                                      fontWeight: FontWeight.bold,
-                                    ),
+                                  Builder(
+                                    builder: (context) {
+                                      // Apply discount if user has discount percentage (same as totals calculation)
+                                      if (colleaguePrice == null) {
+                                        return Text(
+                                          PersianNumber.formatPrice(item.total),
+                                          style: TextStyle(
+                                            fontSize: 16,
+                                            color: Colors.green[700],
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        );
+                                      }
+                                      double finalPrice = colleaguePrice;
+                                      if (user?.discountPercentage != null && user!.discountPercentage! > 0) {
+                                        final discountAmount = colleaguePrice * (user.discountPercentage! / 100.0);
+                                        finalPrice = colleaguePrice - discountAmount;
+                                      }
+                                      final adjustedLineTotal = finalPrice * quantity;
+                                      
+                                      return Text(
+                                        PersianNumber.formatPrice(adjustedLineTotal),
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          color: Colors.green[700],
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      );
+                                    },
                                   ),
                                 ],
                               ),
@@ -1675,15 +1717,46 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
         final isAdminOrOperator =
             user?.isOperator == true || user?.isAdmin == true;
         
-        // ALWAYS use wholesaleAmount (cooperation price) as the primary amount
-        // This is the actual amount the seller pays
-        final baseAmount = invoice.wholesaleAmount ?? invoice.totalAmount;
+        // Calculate the sum of all line items using colleaguePrice (cooperation price)
+        // This ensures the grand total matches the sum of displayed line item totals
+        double calculatedSubtotal = 0.0;
+        for (final item in invoice.items) {
+          final productDetails = _productDetailsCache[item.productId];
+          double? colleaguePrice;
+          
+          // Get colleague_price from cache (same as used in line items)
+          if (productDetails?['colleague_price'] != null) {
+            final value = productDetails!['colleague_price'];
+            if (value is num) {
+              colleaguePrice = value.toDouble();
+            } else if (value is String) {
+              colleaguePrice = double.tryParse(value);
+            }
+          }
+          
+          // Calculate line total (same logic as in _buildItemCard)
+          if (colleaguePrice != null) {
+            // Apply discount if user has discount percentage (same as cart screen)
+            double finalPrice = colleaguePrice;
+            if (user?.discountPercentage != null && user!.discountPercentage! > 0) {
+              final discountAmount = colleaguePrice * (user.discountPercentage! / 100.0);
+              finalPrice = colleaguePrice - discountAmount;
+            }
+            calculatedSubtotal += finalPrice * item.quantity;
+          } else {
+            // Fallback to item.total if colleaguePrice not available
+            calculatedSubtotal += item.total;
+          }
+        }
+        
+        // Use calculated subtotal (sum of line items) as the base amount
+        final baseAmount = calculatedSubtotal > 0 ? calculatedSubtotal : (invoice.wholesaleAmount ?? invoice.totalAmount);
         final taxAmount = invoice.taxAmount;
         final discountAmount = invoice.discountAmount;
         
-        // Calculate final total using cooperation price
-        // Note: Discounts are already applied to wholesaleAmount in backend
-        // So we just need to add tax if any
+        // Calculate final total: baseAmount (sum of line items) + tax - discount
+        // Note: If discounts are already applied in line items (via user discountPercentage),
+        // then discountAmount here should be 0 or already accounted for
         final grandTotal = baseAmount + taxAmount - discountAmount;
 
     return Card(

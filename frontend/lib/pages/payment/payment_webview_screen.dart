@@ -276,7 +276,7 @@ class _PaymentWebViewScreenState extends State<PaymentWebViewScreen> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'پرداخت امن از طریق درگاه زرین‌پال',
+                    'پرداخت امن از طریق درگاه',
                     style: TextStyle(fontSize: 12, color: Colors.grey[700]),
                   ),
                 ),

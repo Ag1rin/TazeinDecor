@@ -134,17 +134,17 @@ class _ProductsHomeState extends State<ProductsHome> {
 
     final categories = await _productService.getCategories();
     
-    // Filter to only show allowed categories (must match backend)
-    final allowedCategoryNames = [
-      'پارکت',
-      'پارکت لمینت',
-      'کاغذ دیواری',
+      // Filter to only show allowed categories (must match backend)
+      final allowedCategoryNames = [
+        'پارکت',
+        'پارکت لمینت',
+        'کاغذ دیواری',
       'قرنیز و ابزار',
-      'درب',
-      'کفپوش',
-      'کفپوش pvc',
-    ];
-    
+        'درب',
+        'کفپوش',
+        'کفپوش pvc',
+      ];
+
     // Categories to explicitly exclude (Parkett Tools / ابزارهای پارکت)
     final excludedCategoryNames = [
       'ابزار پارکت',
@@ -171,12 +171,12 @@ class _ProductsHomeState extends State<ProductsHome> {
       if (allowedCategoryIds.contains(cat.id)) {
         return true;
       }
-      return allowedCategoryNames.any(
-        (allowed) =>
-            cat.name.toLowerCase().contains(allowed.toLowerCase()) ||
-            allowed.toLowerCase().contains(cat.name.toLowerCase()),
-      );
-    }).toList();
+        return allowedCategoryNames.any(
+          (allowed) =>
+              cat.name.toLowerCase().contains(allowed.toLowerCase()) ||
+              allowed.toLowerCase().contains(cat.name.toLowerCase()),
+        );
+      }).toList();
     
     // Always ensure category ID 80 is included if not already present
     if (!filteredCategories.any((cat) => cat.id == 80)) {

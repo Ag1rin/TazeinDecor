@@ -1,14 +1,18 @@
 // Return Request Screen - Select items to return
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'dart:ui' as ui;
+import 'package:provider/provider.dart';
 import '../../models/order_model.dart';
 import '../../services/return_service.dart';
 import '../../services/order_service.dart';
 import '../../services/product_service.dart';
+import '../../providers/auth_provider.dart';
 import '../../utils/app_colors.dart';
 import '../../utils/persian_number.dart';
 import '../../utils/persian_date.dart';
 import '../../utils/product_unit_display.dart';
+import '../../utils/order_total_calculator.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
@@ -28,6 +32,8 @@ class _ReturnRequestScreenState extends State<ReturnRequestScreen> {
   final TextEditingController _reasonController = TextEditingController();
   final Map<int, double> _selectedItems =
       {}; // order_item_id -> quantity to return
+  // Controllers for quantity fields: order_item_id -> TextEditingController
+  final Map<int, TextEditingController> _quantityControllers = {};
   bool _isSubmitting = false;
   OrderModel? _fullOrder;
   // Cache for product details: productId -> product data from secure API
@@ -89,30 +95,55 @@ class _ReturnRequestScreenState extends State<ReturnRequestScreen> {
   @override
   void dispose() {
     _reasonController.dispose();
+    // Dispose all quantity controllers
+    for (final controller in _quantityControllers.values) {
+      controller.dispose();
+    }
+    _quantityControllers.clear();
     super.dispose();
   }
 
   void _toggleItemSelection(OrderItemModel item) {
     setState(() {
       if (_selectedItems.containsKey(item.id)) {
+        // Deselect item
         _selectedItems.remove(item.id);
+        // Dispose controller if exists
+        _quantityControllers[item.id]?.dispose();
+        _quantityControllers.remove(item.id);
       } else {
-        // Select full quantity by default
-        _selectedItems[item.id] = item.quantity;
+        // Select item and auto-fill with max quantity
+        final maxQuantity = item.quantity;
+        _selectedItems[item.id] = maxQuantity;
+        
+        // Create and initialize controller with max quantity
+        final controller = TextEditingController(
+          text: maxQuantity.toStringAsFixed(1),
+        );
+        _quantityControllers[item.id] = controller;
       }
     });
   }
 
   void _updateReturnQuantity(OrderItemModel item, double quantity) {
     setState(() {
+      final maxQuantity = item.quantity;
+      
       if (quantity <= 0) {
+        // Remove selection if quantity is 0 or negative
         _selectedItems.remove(item.id);
+        _quantityControllers[item.id]?.dispose();
+        _quantityControllers.remove(item.id);
       } else {
-        // Ensure quantity doesn't exceed original
-        final maxQuantity = item.quantity;
-        _selectedItems[item.id] = quantity > maxQuantity
-            ? maxQuantity
-            : quantity;
+        // Clamp quantity to max (enforce max limit)
+        final clampedQuantity = quantity > maxQuantity ? maxQuantity : quantity;
+        _selectedItems[item.id] = clampedQuantity;
+        
+        // Update controller text if it exists and value changed
+        final controller = _quantityControllers[item.id];
+        if (controller != null && controller.text != clampedQuantity.toStringAsFixed(1)) {
+          controller.text = clampedQuantity.toStringAsFixed(1);
+        }
       }
     });
   }
@@ -223,8 +254,9 @@ class _ReturnRequestScreenState extends State<ReturnRequestScreen> {
                       Text(
                         'تاریخ سفارش: ${PersianDate.formatDateTime(order.createdAt)}',
                       ),
+                      // Use grand total (cooperation price with tax/discount) for consistency
                       Text(
-                        'مبلغ کل: ${PersianNumber.formatPrice(order.totalAmount)} تومان',
+                        'مبلغ کل: ${PersianNumber.formatPrice(OrderTotalCalculator.calculateGrandTotal(order))} تومان',
                         style: const TextStyle(
                           fontWeight: FontWeight.bold,
                           color: AppColors.primaryBlue,
@@ -247,6 +279,124 @@ class _ReturnRequestScreenState extends State<ReturnRequestScreen> {
               ),
               const SizedBox(height: 12),
               ...order.items.map((item) => _buildItemSelector(item)),
+              const SizedBox(height: 16),
+              // Total Returnable Amount Display
+              if (_selectedItems.isNotEmpty)
+                Consumer<AuthProvider>(
+                  builder: (context, authProvider, _) {
+                    final user = authProvider.user;
+                    // Calculate total returnable amount based on cooperation prices with discounts
+                    double totalReturnable = 0.0;
+                    
+                    for (final entry in _selectedItems.entries) {
+                      final itemId = entry.key;
+                      final returnQuantity = entry.value;
+                      
+                      // Find the item
+                      final item = order.items.firstWhere(
+                        (i) => i.id == itemId,
+                        orElse: () => order.items.first,
+                      );
+                      
+                      // Get colleague price from cache
+                      final productDetails = _productDetailsCache[item.productId];
+                      double? colleaguePrice;
+                      
+                      if (productDetails?['colleague_price'] != null) {
+                        final value = productDetails!['colleague_price'];
+                        if (value is num) {
+                          colleaguePrice = value.toDouble();
+                        } else if (value is String) {
+                          colleaguePrice = double.tryParse(value);
+                        }
+                      } else if (item.product?.colleaguePrice != null) {
+                        colleaguePrice = item.product!.colleaguePrice;
+                      }
+                      
+                      if (colleaguePrice != null) {
+                        // Apply discount if user has discount percentage
+                        double finalPrice = colleaguePrice;
+                        if (user?.discountPercentage != null && user!.discountPercentage! > 0) {
+                          final discountAmount = colleaguePrice * (user.discountPercentage! / 100.0);
+                          finalPrice = colleaguePrice - discountAmount;
+                        }
+                        totalReturnable += finalPrice * returnQuantity;
+                      } else {
+                        // Fallback to item total if colleague price not available
+                        totalReturnable += (item.total / item.quantity) * returnQuantity;
+                      }
+                    }
+                    
+                    return Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: AppColors.primaryRed.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: AppColors.primaryRed,
+                          width: 2,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Row(
+                            children: [
+                              Icon(
+                                Icons.assignment_return,
+                                color: AppColors.primaryRed,
+                                size: 28,
+                              ),
+                              SizedBox(width: 8),
+                              Text(
+                                'مبلغ قابل مرجوعی:',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.primaryRed,
+                                ),
+                              ),
+                            ],
+                          ),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Text(
+                                '${PersianNumber.formatPrice(totalReturnable)} تومان',
+                                style: const TextStyle(
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.primaryRed,
+                                ),
+                              ),
+                              if (user?.discountPercentage != null && user!.discountPercentage! > 0) ...[
+                                const SizedBox(height: 4),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.green.withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    '${user.discountPercentage!.toStringAsFixed(0)}% تخفیف اعمال شده',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.green[700],
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
               const SizedBox(height: 24),
               // Reason
               const Text(
@@ -588,12 +738,21 @@ class _ReturnRequestScreenState extends State<ReturnRequestScreen> {
                   final apiUnit = ProductUnitDisplay.getUnitFromCalculator(calculator);
                   final unit = ProductUnitDisplay.getDisplayUnit(apiUnit);
 
+                  // Get or create controller for this item
+                  if (!_quantityControllers.containsKey(item.id)) {
+                    _quantityControllers[item.id] = TextEditingController(
+                      text: returnQuantity.toStringAsFixed(1),
+                    );
+                  }
+                  final quantityController = _quantityControllers[item.id]!;
+                  
                   return Row(
                     children: [
                       const Text('تعداد مرجوعی: '),
                       const SizedBox(width: 8),
                       Expanded(
                         child: TextField(
+                          controller: quantityController,
                           keyboardType: const TextInputType.numberWithOptions(
                             decimal: true,
                           ),
@@ -601,14 +760,44 @@ class _ReturnRequestScreenState extends State<ReturnRequestScreen> {
                             hintText: 'تعداد',
                             border: const OutlineInputBorder(),
                             suffixText: unit,
+                            helperText: 'حداکثر: ${PersianNumber.formatNumberString(maxQuantity.toStringAsFixed(1))}',
+                            helperMaxLines: 1,
                           ),
                           onChanged: (value) {
                             final qty = double.tryParse(value) ?? 0.0;
                             _updateReturnQuantity(item, qty);
                           },
-                          controller: TextEditingController(
-                            text: returnQuantity.toStringAsFixed(1),
-                          ),
+                          // Enforce max value by validating input
+                          inputFormatters: [
+                            // Custom formatter to limit to maxQuantity
+                            TextInputFormatter.withFunction(
+                              (oldValue, newValue) {
+                                if (newValue.text.isEmpty) {
+                                  return newValue;
+                                }
+                                final parsed = double.tryParse(newValue.text);
+                                if (parsed == null) {
+                                  return oldValue;
+                                }
+                                if (parsed > maxQuantity) {
+                                  // Clamp to max and update controller
+                                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                                    quantityController.text = maxQuantity.toStringAsFixed(1);
+                                    quantityController.selection = TextSelection.fromPosition(
+                                      TextPosition(offset: quantityController.text.length),
+                                    );
+                                  });
+                                  return TextEditingValue(
+                                    text: maxQuantity.toStringAsFixed(1),
+                                    selection: TextSelection.collapsed(
+                                      offset: maxQuantity.toStringAsFixed(1).length,
+                                    ),
+                                  );
+                                }
+                                return newValue;
+                              },
+                            ),
+                          ],
                         ),
                       ),
                       const SizedBox(width: 8),

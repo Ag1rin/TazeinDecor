@@ -7,6 +7,7 @@ import '../../utils/persian_number.dart';
 import '../../utils/persian_date.dart';
 import '../../utils/app_colors.dart';
 import '../../utils/status_labels.dart';
+import '../../utils/order_total_calculator.dart';
 import '../invoices/invoice_detail_screen.dart';
 
 class OrdersScreen extends StatefulWidget {
@@ -203,7 +204,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    '${PersianNumber.formatPrice(order.payableAmount)} تومان',
+                    '${PersianNumber.formatPrice(OrderTotalCalculator.calculateGrandTotal(order))} تومان',
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,

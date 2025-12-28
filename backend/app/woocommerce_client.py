@@ -87,7 +87,7 @@ class WooCommerceClient:
         except Exception as e:
             print(f"Error fetching product {product_id}: {e}")
             return None
-
+    
     def get_category(self, category_id: int) -> Optional[Dict]:
         """Get single category by ID"""
         try:

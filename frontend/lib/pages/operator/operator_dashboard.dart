@@ -12,6 +12,7 @@ import '../../utils/persian_number.dart';
 import '../../utils/persian_date.dart';
 import '../../utils/product_unit_display.dart';
 import '../../utils/status_labels.dart';
+import '../../utils/order_total_calculator.dart';
 import '../../pages/invoices/invoice_detail_screen.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -447,7 +448,7 @@ class _OperatorDashboardState extends State<OperatorDashboard>
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    '${PersianNumber.formatPrice(order.payableAmount)} تومان',
+                    '${PersianNumber.formatPrice(OrderTotalCalculator.calculateGrandTotal(order))} تومان',
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
@@ -1119,7 +1120,7 @@ class _OperatorDashboardState extends State<OperatorDashboard>
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                'مبلغ: ${PersianNumber.formatPrice(order.totalAmount)} تومان',
+                'مبلغ: ${PersianNumber.formatPrice(OrderTotalCalculator.calculateGrandTotal(order))} تومان',
               ),
               Text('وضعیت: ${_getStatusText(order.status)}'),
               if (order.installationDate != null)

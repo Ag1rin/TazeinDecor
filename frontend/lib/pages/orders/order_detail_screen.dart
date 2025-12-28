@@ -6,6 +6,7 @@ import '../../utils/persian_number.dart';
 import '../../utils/persian_date.dart';
 import '../../utils/app_colors.dart';
 import '../../utils/product_unit_display.dart';
+import '../../utils/order_total_calculator.dart';
 import '../../services/order_service.dart';
 import '../../services/product_service.dart';
 import '../../pages/returns/return_request_screen.dart';
@@ -176,7 +177,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                         ),
                       ),
                       Text(
-                        '${PersianNumber.formatPrice(widget.order.totalAmount)} تومان',
+                        '${PersianNumber.formatPrice(OrderTotalCalculator.calculateGrandTotal(widget.order))} تومان',
                         style: const TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
