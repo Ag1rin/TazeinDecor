@@ -58,7 +58,7 @@ dependencies:
   image_picker: ^1.0.7
   
   # Audio Recording
-  record: ^5.1.1
+  record: ^5.1.2
   audioplayers: ^6.5.0
   
   # PDF Generation
@@ -109,7 +109,8 @@ dev_dependencies:
 
 # Dependency overrides to fix compatibility issues
 dependency_overrides:
-  # Fix record_linux compatibility issue - use compatible platform interface version
+  # Fix record_web compatibility issue - use older version that doesn't require streamBufferSize
+  record_web: 1.2.1
   record_platform_interface: 1.3.0
   record_linux: ^1.2.1
 
