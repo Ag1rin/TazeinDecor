@@ -12,9 +12,6 @@ import dotenv
 class Settings(BaseSettings):
     """Application settings"""
     
-    # Server
-    PORT: int = 80  # Default port for development
-    
     # Database
     DATABASE_URL: str = "sqlite:///./data/tazeindecor.db"
     
