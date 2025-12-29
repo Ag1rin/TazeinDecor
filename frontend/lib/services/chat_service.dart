@@ -1,5 +1,6 @@
 // Chat Service
 import 'api_service.dart';
+import '../utils/persian_date.dart';
 // ignore: unused_import
 import 'dart:io';
 
@@ -33,7 +34,7 @@ class ChatMessage {
       imageUrl: json['image_url'],
       voiceUrl: json['voice_url'],
       messageType: json['message_type'] ?? 'text',
-      createdAt: DateTime.parse(json['created_at']),
+      createdAt: PersianDate.parseToLocal(json['created_at']),
     );
   }
 }

@@ -19,12 +19,40 @@ class PersianDate {
     return jalali.formatPersian();
   }
 
+  /// Parse datetime string from backend and convert to local timezone (Tehran)
+  /// Handles both UTC and timezone-aware datetime strings
+  static DateTime parseToLocal(String dateTimeString) {
+    try {
+      // Parse the datetime string
+      DateTime parsed = DateTime.parse(dateTimeString);
+      
+      // If the datetime is UTC (has 'Z' or ends with '+00:00'), convert to local
+      if (parsed.isUtc) {
+        return parsed.toLocal();
+      }
+      
+      // If datetime is already in local timezone, return as is
+      return parsed;
+    } catch (e) {
+      // Fallback: try parsing as UTC and convert to local
+      try {
+        return DateTime.parse(dateTimeString).toUtc().toLocal();
+      } catch (e2) {
+        // If all parsing fails, return current time
+        return DateTime.now();
+      }
+    }
+  }
+
   /// Format DateTime to Persian date string with time
   /// Format: yyyy/MM/dd HH:mm (e.g., 1403/09/15 14:30)
+  /// Uses local timezone (Tehran) for display
   static String formatDateTime(DateTime dateTime) {
-    final jalali = JalaliDate.fromDateTime(dateTime);
-    final hour = dateTime.hour.toString().padLeft(2, '0');
-    final minute = dateTime.minute.toString().padLeft(2, '0');
+    // Ensure we're using local timezone
+    final localDateTime = dateTime.isUtc ? dateTime.toLocal() : dateTime;
+    final jalali = JalaliDate.fromDateTime(localDateTime);
+    final hour = localDateTime.hour.toString().padLeft(2, '0');
+    final minute = localDateTime.minute.toString().padLeft(2, '0');
     return '${jalali.format()} $hour:$minute';
   }
 

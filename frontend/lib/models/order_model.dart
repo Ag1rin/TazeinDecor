@@ -155,7 +155,7 @@ class OrderModel {
       paymentMethod: json['payment_method'],
       deliveryMethod: json['delivery_method'],
       installationDate: json['installation_date'] != null
-          ? DateTime.parse(json['installation_date'])
+          ? PersianDate.parseToLocal(json['installation_date'])
           : null,
       installationNotes: json['installation_notes'],
       totalAmount: _safeToDouble(json['total_amount']),
@@ -167,7 +167,7 @@ class OrderModel {
           : null,
       notes: json['notes'],
       isNew: json['is_new'] ?? false,
-      createdAt: DateTime.parse(json['created_at']),
+      createdAt: PersianDate.parseToLocal(json['created_at']),
       items:
           (json['items'] as List<dynamic>?)
               ?.map((item) => OrderItemModel.fromJson(item))
@@ -175,10 +175,10 @@ class OrderModel {
           [],
       invoiceNumber: json['invoice_number'],
       issueDate: json['issue_date'] != null
-          ? DateTime.parse(json['issue_date'])
+          ? PersianDate.parseToLocal(json['issue_date'])
           : null,
       dueDate: json['due_date'] != null
-          ? DateTime.parse(json['due_date'])
+          ? PersianDate.parseToLocal(json['due_date'])
           : null,
       subtotal: json['subtotal'] != null
           ? _safeToDouble(json['subtotal'])
@@ -188,11 +188,11 @@ class OrderModel {
       paymentTerms: json['payment_terms'],
       editRequestedBy: json['edit_requested_by'] != null ? _safeToInt(json['edit_requested_by']) : null,
       editRequestedAt: json['edit_requested_at'] != null
-          ? DateTime.parse(json['edit_requested_at'])
+          ? PersianDate.parseToLocal(json['edit_requested_at'])
           : null,
       editApprovedBy: json['edit_approved_by'] != null ? _safeToInt(json['edit_approved_by']) : null,
       editApprovedAt: json['edit_approved_at'] != null
-          ? DateTime.parse(json['edit_approved_at'])
+          ? PersianDate.parseToLocal(json['edit_approved_at'])
           : null,
       customerName: json['customer_name'],
       customerMobile: json['customer_mobile'],

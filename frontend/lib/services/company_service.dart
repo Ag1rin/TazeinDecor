@@ -1,5 +1,6 @@
 // Company Service
 import 'api_service.dart';
+import '../utils/persian_date.dart';
 
 class CompanyModel {
   final int id;
@@ -28,7 +29,7 @@ class CompanyModel {
       address: json['address'],
       logo: json['logo'],
       notes: json['notes'],
-      createdAt: DateTime.parse(json['created_at']),
+      createdAt: PersianDate.parseToLocal(json['created_at']),
     );
   }
   

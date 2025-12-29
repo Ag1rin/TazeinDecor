@@ -1,5 +1,6 @@
 // Installation Service
 import 'api_service.dart';
+import '../utils/persian_date.dart';
 
 class InstallationModel {
   final int id;
@@ -22,10 +23,10 @@ class InstallationModel {
     return InstallationModel(
       id: json['id'],
       orderId: json['order_id'],
-      installationDate: DateTime.parse(json['installation_date']),
+      installationDate: PersianDate.parseToLocal(json['installation_date']),
       notes: json['notes'],
       color: json['color'],
-      createdAt: DateTime.parse(json['created_at']),
+      createdAt: PersianDate.parseToLocal(json['created_at']),
     );
   }
 }

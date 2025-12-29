@@ -491,18 +491,28 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
         appBar: AppBar(
           title: Text(invoice.effectiveInvoiceNumberWithDate),
           actions: [
-            IconButton(
-              icon: (_isGeneratingPdf || _isLoadingBrands)
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.share),
-              onPressed: (_isGeneratingPdf || _isLoadingBrands)
-                  ? null
-                  : _shareInvoiceAsPdf,
-              tooltip: 'اشتراک‌گذاری PDF',
+            // PDF share button - only for non-sellers (operators, admins)
+            Consumer<AuthProvider>(
+              builder: (context, authProvider, _) {
+                final user = authProvider.user;
+                // Hide PDF share button for sellers
+                if (user?.isSeller == true) {
+                  return const SizedBox.shrink();
+                }
+                return IconButton(
+                  icon: (_isGeneratingPdf || _isLoadingBrands)
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.share),
+                  onPressed: (_isGeneratingPdf || _isLoadingBrands)
+                      ? null
+                      : _shareInvoiceAsPdf,
+                  tooltip: 'اشتراک‌گذاری PDF',
+                );
+              },
             ),
             Consumer<AuthProvider>(
               builder: (context, authProvider, _) {
