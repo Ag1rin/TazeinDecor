@@ -149,6 +149,9 @@ class _CompaniesScreenState extends State<CompaniesScreen> {
   }
 
   Widget _buildCompanyCard(CompanyModel company) {
+    // Check if this is a virtual company (from WooCommerce brand) or a real company
+    final isVirtualCompany = company.id == 0;
+    
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: ListTile(
@@ -159,34 +162,64 @@ class _CompaniesScreenState extends State<CompaniesScreen> {
                 ),
               )
             : const CircleAvatar(child: Icon(Icons.business)),
-        title: Text(company.name),
+        title: Row(
+          children: [
+            Expanded(child: Text(company.name)),
+            if (isVirtualCompany)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.blue.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Text(
+                  'برند',
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: Colors.blue,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+          ],
+        ),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (company.mobile != null) Text('موبایل: ${company.mobile}'),
             if (company.address != null) Text('آدرس: ${company.address}'),
+            if (isVirtualCompany)
+              const Text(
+                'برند از ووکامرس',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: Colors.blue,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
           ],
         ),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            IconButton(
-              icon: const Icon(Icons.edit),
-              onPressed: () => _editCompany(company),
-            ),
-            IconButton(
-              icon: const Icon(Icons.image),
-              onPressed: () => _uploadLogo(company),
-              tooltip: 'آپلود لوگو',
-            ),
-            // NEW: Delete button with confirmation
-            IconButton(
-              icon: const Icon(Icons.delete, color: Colors.red),
-              onPressed: () => _deleteCompany(company),
-              tooltip: 'حذف شرکت',
-            ),
-          ],
-        ),
+        trailing: isVirtualCompany
+            ? null  // Virtual companies (brands) can't be edited/deleted
+            : Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.edit),
+                    onPressed: () => _editCompany(company),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.image),
+                    onPressed: () => _uploadLogo(company),
+                    tooltip: 'آپلود لوگو',
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.delete, color: Colors.red),
+                    onPressed: () => _deleteCompany(company),
+                    tooltip: 'حذف شرکت',
+                  ),
+                ],
+              ),
       ),
     );
   }

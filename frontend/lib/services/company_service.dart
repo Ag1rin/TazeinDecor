@@ -22,13 +22,15 @@ class CompanyModel {
   
   factory CompanyModel.fromJson(Map<String, dynamic> json) {
     return CompanyModel(
-      id: json['id'],
-      name: json['name'],
+      id: json['id'] ?? 0,
+      name: json['name'] ?? '',
       mobile: json['mobile'],
       address: json['address'],
       logo: json['logo'],
       notes: json['notes'],
-      createdAt: DateTime.parse(json['created_at']),
+      createdAt: json['created_at'] != null 
+          ? DateTime.parse(json['created_at'])
+          : DateTime.now(), // Fallback for virtual companies from brands
     );
   }
   

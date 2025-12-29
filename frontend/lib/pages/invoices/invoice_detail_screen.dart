@@ -491,19 +491,6 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
         appBar: AppBar(
           title: Text('فاکتور ${invoice.effectiveInvoiceNumber}'),
           actions: [
-            IconButton(
-              icon: (_isGeneratingPdf || _isLoadingBrands)
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.share),
-              onPressed: (_isGeneratingPdf || _isLoadingBrands)
-                  ? null
-                  : _shareInvoiceAsPdf,
-              tooltip: 'اشتراک‌گذاری PDF',
-            ),
             Consumer<AuthProvider>(
               builder: (context, authProvider, _) {
                 final user = authProvider.user;

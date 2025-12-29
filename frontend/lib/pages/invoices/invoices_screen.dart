@@ -14,6 +14,7 @@ import '../../services/order_service.dart';
 import '../../services/aggregated_pdf_service.dart';
 import '../../services/company_service.dart';
 import 'invoice_detail_screen.dart';
+import 'invoice_selection_screen.dart';
 import 'package:printing/printing.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'dart:typed_data';
@@ -216,13 +217,18 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
               onPressed: _isGeneratingPdfs
                   ? null
                   : () {
-                      print('🔍 FAB pressed - showing date filter dialog');
-                      _showDateFilterDialog();
+                      print('🔍 FAB pressed - navigating to invoice selection');
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const InvoiceSelectionScreen(),
+                        ),
+                      );
                     },
               backgroundColor: _isGeneratingPdfs
                   ? Colors.grey
                   : AppColors.primaryBlue,
-              tooltip: 'فیلتر بر اساس تاریخ و تولید PDF',
+              tooltip: 'انتخاب فاکتورها و تولید PDF',
               child: _isGeneratingPdfs
                   ? const SizedBox(
                       width: 24,
@@ -232,7 +238,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                         valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                       ),
                     )
-                  : const Icon(Icons.filter_alt),
+                  : const Icon(Icons.checklist),
             );
           },
         ),
@@ -469,6 +475,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
   }
 
   /// NEW: Show date filter dialog (Today/Yesterday)
+  // ignore: unused_element
   Future<void> _showDateFilterDialog() async {
     final selected = await showDialog<String>(
       context: context,

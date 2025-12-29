@@ -294,7 +294,7 @@ class CompanyResponse(BaseModel):
     address: Optional[str]
     logo: Optional[str]
     notes: Optional[str]
-    created_at: datetime
+    created_at: Optional[datetime] = None  # Allow None for virtual companies from brands
     
     class Config:
         from_attributes = True
