@@ -8,11 +8,15 @@ import '../../models/order_model.dart';
 import '../../utils/persian_date.dart';
 import '../../utils/app_colors.dart';
 import '../../utils/status_labels.dart';
+import '../../utils/persian_number.dart';
 import '../../utils/jalali_date.dart';
+import '../../utils/product_unit_display.dart';
 import '../../widgets/jalali_date_picker.dart';
 import '../../services/order_service.dart';
 import '../../services/aggregated_pdf_service.dart';
 import '../../services/company_service.dart';
+import '../../services/return_service.dart';
+import '../../services/product_service.dart';
 import 'invoice_detail_screen.dart';
 import 'package:printing/printing.dart';
 import 'package:fluttertoast/fluttertoast.dart';
@@ -29,10 +33,17 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
   final TextEditingController _searchController = TextEditingController();
   final OrderService _orderService = OrderService();
   final CompanyService _companyService = CompanyService();
+  final ReturnService _returnService = ReturnService();
+  final ProductService _productService = ProductService();
   String? _selectedStatus;
   JalaliDate? _startDate;
   JalaliDate? _endDate;
   bool _isGeneratingPdfs = false;
+  List<ReturnModel> _returns = [];
+  bool _isLoadingReturns = false;
+  Map<int, OrderModel?> _returnOrdersCache = {};
+  Map<int, Map<String, dynamic>> _productDetailsCache = {};
+  Map<int, bool> _loadingProductDetails = {};
 
   @override
   void initState() {
@@ -49,11 +60,51 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
   }
 
   Future<void> _loadInvoices() async {
-    final invoiceProvider = Provider.of<InvoiceProvider>(
-      context,
-      listen: false,
-    );
-    await invoiceProvider.loadInvoices(status: _selectedStatus);
+    if (_selectedStatus == 'returned') {
+      // Load return requests instead of orders
+      await _loadReturns();
+    } else {
+      final invoiceProvider = Provider.of<InvoiceProvider>(
+        context,
+        listen: false,
+      );
+      await invoiceProvider.loadInvoices(status: _selectedStatus);
+    }
+  }
+
+  Future<void> _loadReturns() async {
+    setState(() {
+      _isLoadingReturns = true;
+    });
+    try {
+      final returns = await _returnService.getReturns(perPage: 100);
+      setState(() {
+        _returns = returns;
+        _isLoadingReturns = false;
+      });
+      // Load order details for each return
+      for (final returnItem in returns) {
+        if (!_returnOrdersCache.containsKey(returnItem.orderId)) {
+          final order = await _orderService.getOrder(returnItem.orderId);
+          setState(() {
+            _returnOrdersCache[returnItem.orderId] = order;
+          });
+        }
+        // Load product details for return items
+        for (final item in returnItem.items) {
+          final itemData = item as Map<String, dynamic>;
+          final productId = itemData['product_id'] as int?;
+          if (productId != null && !_productDetailsCache.containsKey(productId)) {
+            _loadProductDetails(productId);
+          }
+        }
+      }
+    } catch (e) {
+      setState(() {
+        _isLoadingReturns = false;
+      });
+      print('Error loading returns: $e');
+    }
   }
 
   Future<void> _searchInvoices() async {
@@ -126,69 +177,64 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                 scrollDirection: Axis.horizontal,
                 child: Row(
                   children: [
-                    _buildFilterChip('همه', _selectedStatus == null),
+                    _buildFilterChip('سفارشات', _selectedStatus == null),
                     const SizedBox(width: 8),
                     _buildFilterChip(
-                      'در انتظار تکمیل',
-                      _selectedStatus == 'pending_completion',
+                      'مرجوعی‌ها',
+                      _selectedStatus == 'returned',
                     ),
-                    const SizedBox(width: 8),
-                    _buildFilterChip(
-                      'در حال انجام',
-                      _selectedStatus == 'in_progress',
-                    ),
-                    const SizedBox(width: 8),
-                    _buildFilterChip('تسویه شده', _selectedStatus == 'settled'),
                   ],
                 ),
               ),
             ),
             const Divider(height: 1),
-            // Invoices list
+            // Invoices list or Returns list
             Expanded(
-              child: Consumer<InvoiceProvider>(
-                builder: (context, invoiceProvider, _) {
-                  if (invoiceProvider.isLoading) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
+              child: _selectedStatus == 'returned'
+                  ? _buildReturnsList()
+                  : Consumer<InvoiceProvider>(
+                      builder: (context, invoiceProvider, _) {
+                        if (invoiceProvider.isLoading) {
+                          return const Center(child: CircularProgressIndicator());
+                        }
 
-                  if (invoiceProvider.error != null) {
-                    return Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            invoiceProvider.error!,
-                            style: const TextStyle(color: Colors.red),
+                        if (invoiceProvider.error != null) {
+                          return Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  invoiceProvider.error!,
+                                  style: const TextStyle(color: Colors.red),
+                                ),
+                                const SizedBox(height: 16),
+                                ElevatedButton(
+                                  onPressed: _loadInvoices,
+                                  child: const Text('تلاش مجدد'),
+                                ),
+                              ],
+                            ),
+                          );
+                        }
+
+                        final invoices = invoiceProvider.invoices;
+                        if (invoices.isEmpty) {
+                          return const Center(child: Text('فاکتوری یافت نشد'));
+                        }
+
+                        return RefreshIndicator(
+                          onRefresh: _loadInvoices,
+                          child: ListView.builder(
+                            padding: const EdgeInsets.all(16),
+                            itemCount: invoices.length,
+                            itemBuilder: (context, index) {
+                              final invoice = invoices[index];
+                              return _buildInvoiceCard(invoice);
+                            },
                           ),
-                          const SizedBox(height: 16),
-                          ElevatedButton(
-                            onPressed: _loadInvoices,
-                            child: const Text('تلاش مجدد'),
-                          ),
-                        ],
-                      ),
-                    );
-                  }
-
-                  final invoices = invoiceProvider.invoices;
-                  if (invoices.isEmpty) {
-                    return const Center(child: Text('فاکتوری یافت نشد'));
-                  }
-
-                  return RefreshIndicator(
-                    onRefresh: _loadInvoices,
-                    child: ListView.builder(
-                      padding: const EdgeInsets.all(16),
-                      itemCount: invoices.length,
-                      itemBuilder: (context, index) {
-                        final invoice = invoices[index];
-                        return _buildInvoiceCard(invoice);
+                        );
                       },
                     ),
-                  );
-                },
-              ),
             ),
           ],
         ),
@@ -240,26 +286,321 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
     );
   }
 
+  Widget _buildReturnsList() {
+    if (_isLoadingReturns) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_returns.isEmpty) {
+      return const Center(child: Text('مرجوعی یافت نشد'));
+    }
+
+    return RefreshIndicator(
+      onRefresh: _loadReturns,
+      child: ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: _returns.length,
+        itemBuilder: (context, index) {
+          final returnItem = _returns[index];
+          return _buildReturnCard(returnItem);
+        },
+      ),
+    );
+  }
+
+  Widget _buildReturnCard(ReturnModel returnItem) {
+    final order = _returnOrdersCache[returnItem.orderId];
+    final statusColor = _getReturnStatusColor(returnItem.status);
+    final statusText = StatusLabels.returnStatus[returnItem.status] ?? returnItem.status;
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      color: returnItem.isNew ? Colors.red.withOpacity(0.1) : null,
+      child: ExpansionTile(
+        leading: returnItem.isNew
+            ? const Icon(Icons.new_releases, color: Colors.red)
+            : _getReturnStatusIcon(returnItem.status),
+        title: Text(
+          order != null 
+              ? 'مرجوعی ${order.effectiveInvoiceNumberWithDate}'
+              : 'مرجوعی ${returnItem.orderId}',
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'تاریخ: ${PersianDate.formatDateTime(returnItem.createdAt)}',
+              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+            ),
+            if (order != null) ...[
+              const SizedBox(height: 4),
+              Text(
+                'فاکتور: ${order.effectiveInvoiceNumberWithDate}',
+                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+              ),
+            ],
+          ],
+        ),
+        trailing: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: statusColor,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Text(
+            statusText,
+            style: TextStyle(
+              color: _isDarkStatus(returnItem.status) ? Colors.white : Colors.black87,
+              fontWeight: FontWeight.bold,
+              fontSize: 12,
+            ),
+          ),
+        ),
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Order details
+                if (order != null) ...[
+                  const Text(
+                    'جزئیات سفارش:',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                  ),
+                  const SizedBox(height: 8),
+                  _buildOrderInfo(order),
+                  const Divider(),
+                ],
+                // Return items
+                if (returnItem.items.isNotEmpty) ...[
+                  const Text(
+                    'آیتم‌های مرجوعی:',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                  ),
+                  const SizedBox(height: 8),
+                  ...returnItem.items.map((item) {
+                    final itemData = item as Map<String, dynamic>;
+                    final productId = itemData['product_id'] as int?;
+                    return _buildReturnItemCard(itemData, productId, order);
+                  }),
+                  const Divider(),
+                ],
+                // Reason
+                if (returnItem.reason != null && returnItem.reason!.isNotEmpty) ...[
+                  const Text(
+                    'علت مرجوعی:',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[100],
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      returnItem.reason!,
+                      style: const TextStyle(fontSize: 13),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOrderInfo(OrderModel order) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('شماره فاکتور: ${order.effectiveInvoiceNumberWithDate}'),
+        const SizedBox(height: 4),
+        Text('تاریخ: ${PersianDate.formatDateTime(order.createdAt)}'),
+        if (order.customerName != null) ...[
+          const SizedBox(height: 4),
+          Text('مشتری: ${order.customerName}'),
+        ],
+        if (order.customerMobile != null) ...[
+          const SizedBox(height: 4),
+          Text('تماس: ${order.customerMobile}'),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildReturnItemCard(Map<String, dynamic> itemData, int? productId, OrderModel? order) {
+    final quantityValue = (itemData['quantity'] as num?)?.toDouble() ?? 0.0;
+    final quantity = quantityValue.toStringAsFixed(1);
+    final unit = itemData['unit']?.toString() ?? 'package';
+    final price = (itemData['price'] as num?)?.toDouble() ?? 0.0;
+    final total = quantityValue * price; // Fix: proper calculation
+    final variationPattern = itemData['variation_pattern']?.toString();
+
+    // Convert unit to Persian
+    final persianUnit = ProductUnitDisplay.getDisplayUnit(unit);
+
+    // Get product name - try multiple sources
+    String productName = 'نامشخص';
+    
+    // First try from product details cache (from secure API)
+    if (productId != null && _productDetailsCache.containsKey(productId)) {
+      final productDetails = _productDetailsCache[productId];
+      if (productDetails != null && productDetails['name'] != null) {
+        productName = productDetails['name'].toString();
+      }
+    }
+    
+    // If not found, try from order items
+    if (productName == 'نامشخص' && order != null && productId != null && order.items.isNotEmpty) {
+      try {
+        final orderItem = order.items.firstWhere(
+          (item) => item.productId == productId,
+        );
+        if (orderItem.product != null && orderItem.product!.name.isNotEmpty) {
+          productName = orderItem.product!.name;
+        }
+      } catch (e) {
+        // Product not found in order items
+      }
+    }
+    
+    // If still not found, load from API
+    if (productName == 'نامشخص' && productId != null && !_productDetailsCache.containsKey(productId)) {
+      _loadProductDetails(productId);
+    }
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      color: Colors.grey[50],
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              productName,
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('تعداد: ${PersianNumber.formatNumberString(quantity)} $persianUnit'),
+                Text('قیمت: ${PersianNumber.formatPrice(price)} تومان'),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'مبلغ کل: ${PersianNumber.formatPrice(total)} تومان',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            if (variationPattern != null && variationPattern.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(
+                'کد طرح: $variationPattern',
+                style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Color _getReturnStatusColor(String status) {
+    switch (status) {
+      case 'pending':
+        return Colors.orange;
+      case 'approved':
+        return Colors.green;
+      case 'rejected':
+        return Colors.red;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  bool _isDarkStatus(String status) {
+    return status == 'approved' || status == 'rejected';
+  }
+
+  Widget _getReturnStatusIcon(String status) {
+    switch (status) {
+      case 'pending':
+        return const Icon(Icons.pending, color: Colors.orange);
+      case 'approved':
+        return const Icon(Icons.check_circle, color: Colors.green);
+      case 'rejected':
+        return const Icon(Icons.cancel, color: Colors.red);
+      default:
+        return const Icon(Icons.help_outline, color: Colors.grey);
+    }
+  }
+
+  Future<void> _loadProductDetails(int productId) async {
+    if (_productDetailsCache.containsKey(productId) ||
+        _loadingProductDetails[productId] == true) {
+      return; // Already loaded or loading
+    }
+
+    setState(() {
+      _loadingProductDetails[productId] = true;
+    });
+
+    try {
+      // Get product from order to find wooId
+      int? wooId;
+      for (final order in _returnOrdersCache.values) {
+        if (order != null) {
+          try {
+            final orderItem = order.items.firstWhere(
+              (item) => item.productId == productId,
+            );
+            wooId = orderItem.product?.wooId ?? productId;
+            break;
+          } catch (e) {
+            continue;
+          }
+        }
+      }
+      
+      final data = await _productService.getProductFromSecureAPI(wooId ?? productId);
+      if (mounted && data != null) {
+        setState(() {
+          _productDetailsCache[productId] = data;
+          _loadingProductDetails[productId] = false;
+        });
+      } else {
+        setState(() {
+          _loadingProductDetails[productId] = false;
+        });
+      }
+    } catch (e) {
+      print('Error loading product details for $productId: $e');
+      if (mounted) {
+        setState(() {
+          _loadingProductDetails[productId] = false;
+        });
+      }
+    }
+  }
+
   Widget _buildFilterChip(String label, bool isSelected) {
     return FilterChip(
       label: Text(label),
       selected: isSelected,
       onSelected: (selected) {
         setState(() {
-          if (label == 'همه') {
+          if (label == 'سفارشات') {
             _selectedStatus = null;
-          } else {
-            switch (label) {
-              case 'در انتظار تکمیل':
-                _selectedStatus = 'pending_completion';
-                break;
-              case 'در حال انجام':
-                _selectedStatus = 'in_progress';
-                break;
-              case 'تسویه شده':
-                _selectedStatus = 'settled';
-                break;
-            }
+          } else if (label == 'مرجوعی‌ها') {
+            _selectedStatus = 'returned';
           }
         });
         _loadInvoices();
