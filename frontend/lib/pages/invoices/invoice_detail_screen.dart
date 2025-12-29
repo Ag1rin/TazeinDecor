@@ -753,8 +753,8 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
                         style: const TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
+                          ),
                         ),
-                      ),
                       if (invoice.dueDate != null)
                         Text(
                           'تاریخ سررسید: ${PersianDate.formatDate(invoice.dueDate!)}',
@@ -937,8 +937,8 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
       for (final item in widget.invoice.items) {
         print('   - Loading details for product ${item.productId}');
         // Always load product details from secure API to get colleague_price and complete product information
-        _loadProductDetails(item.productId, item.variationId);
-      }
+          _loadProductDetails(item.productId, item.variationId);
+        }
     });
   }
 
@@ -1459,41 +1459,41 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
                               );
                               
                               return Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: AppColors.primaryBlue.withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.primaryBlue.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     // Unit row
                                     Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(
-                                          Icons.shopping_cart,
-                                          size: 14,
-                                          color: AppColors.primaryBlue,
-                                        ),
-                                        const SizedBox(width: 4),
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.shopping_cart,
+                                  size: 14,
+                                  color: AppColors.primaryBlue,
+                                ),
+                                const SizedBox(width: 4),
                                         Flexible(
                                           child: Text(
                                             'تعداد: ${ProductUnitDisplay.formatQuantityWithUnit(quantity: quantity, apiUnit: apiUnit)}',
-                                            style: TextStyle(
-                                              fontSize: 13,
-                                              fontWeight: FontWeight.bold,
-                                              color: AppColors.primaryBlue,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.primaryBlue,
                                             ),
                                             overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                                     // Coverage row (متراژ) - only show if available
                                     if (coverageStr != null && coverageStr.isNotEmpty)
                                       Padding(
@@ -1613,11 +1613,11 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
                                 if (colleaguePrice == null) {
                                   return Text(
                                     PersianNumber.formatPrice(item.total),
-                                    style: const TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                      color: AppColors.primaryBlue,
-                                    ),
+                style: const TextStyle(
+                                fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                                color: AppColors.primaryBlue,
+                              ),
                                   );
                                 }
                                 double finalPrice = colleaguePrice;
@@ -1674,11 +1674,11 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
                                       if (colleaguePrice == null) {
                                         return Text(
                                           PersianNumber.formatPrice(item.total),
-                                          style: TextStyle(
-                                            fontSize: 16,
-                                            color: Colors.green[700],
-                                            fontWeight: FontWeight.bold,
-                                          ),
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      color: Colors.green[700],
+                                      fontWeight: FontWeight.bold,
+                                    ),
                                         );
                                       }
                                       double finalPrice = colleaguePrice;

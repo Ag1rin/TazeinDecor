@@ -128,7 +128,7 @@ class _ReturnRequestScreenState extends State<ReturnRequestScreen> {
     });
   }
 
-  void _updateReturnQuantity(OrderItemModel item, double quantity) {
+  void _updateReturnQuantity(OrderItemModel item, double quantity, {bool updateController = false}) {
     setState(() {
       final maxQuantity = item.quantity;
       
@@ -142,10 +142,19 @@ class _ReturnRequestScreenState extends State<ReturnRequestScreen> {
         final clampedQuantity = quantity > maxQuantity ? maxQuantity : quantity;
         _selectedItems[item.id] = clampedQuantity;
         
-        // Update controller text if it exists and value changed
-        final controller = _quantityControllers[item.id];
-        if (controller != null && controller.text != clampedQuantity.toStringAsFixed(1)) {
-          controller.text = clampedQuantity.toStringAsFixed(1);
+        // Only update controller text if explicitly requested (e.g., when clamping)
+        // Don't update during normal typing to avoid clearing user input
+        if (updateController) {
+          final controller = _quantityControllers[item.id];
+          if (controller != null) {
+            final newText = clampedQuantity.toStringAsFixed(1);
+            if (controller.text != newText) {
+              controller.text = newText;
+              controller.selection = TextSelection.collapsed(
+                offset: newText.length,
+              );
+            }
+          }
         }
       }
     });
@@ -767,8 +776,18 @@ class _ReturnRequestScreenState extends State<ReturnRequestScreen> {
                             helperMaxLines: 1,
                           ),
                           onChanged: (value) {
-                            final qty = double.tryParse(value) ?? 0.0;
-                            _updateReturnQuantity(item, qty);
+                            // Allow user to type freely - only update when value is valid
+                            // Don't interfere with user input by updating controller
+                            if (value.isNotEmpty) {
+                              final qty = double.tryParse(value);
+                              if (qty != null && qty >= 0) {
+                                // Update selected quantity without touching controller
+                                // This allows user to continue typing
+                                final maxQuantity = item.quantity;
+                                final clampedQuantity = qty > maxQuantity ? maxQuantity : qty;
+                                _selectedItems[item.id] = clampedQuantity;
+                              }
+                            }
                           },
                           // Enforce max value by validating input
                           inputFormatters: [
@@ -784,16 +803,20 @@ class _ReturnRequestScreenState extends State<ReturnRequestScreen> {
                                 }
                                 if (parsed > maxQuantity) {
                                   // Clamp to max and update controller
+                                  final maxText = maxQuantity.toStringAsFixed(1);
                                   WidgetsBinding.instance.addPostFrameCallback((_) {
-                                    quantityController.text = maxQuantity.toStringAsFixed(1);
-                                    quantityController.selection = TextSelection.fromPosition(
-                                      TextPosition(offset: quantityController.text.length),
-                                    );
+                                    if (quantityController.text != maxText) {
+                                      quantityController.text = maxText;
+                                      quantityController.selection = TextSelection.collapsed(
+                                        offset: maxText.length,
+                                      );
+                                    }
+                                    _updateReturnQuantity(item, maxQuantity, updateController: false);
                                   });
                                   return TextEditingValue(
-                                    text: maxQuantity.toStringAsFixed(1),
+                                    text: maxText,
                                     selection: TextSelection.collapsed(
-                                      offset: maxQuantity.toStringAsFixed(1).length,
+                                      offset: maxText.length,
                                     ),
                                   );
                                 }
