@@ -3,7 +3,7 @@ Database models
 """
 from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, ForeignKey, Text, Enum as SQLEnum, TypeDecorator
 from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func, cast
+from sqlalchemy.sql import func, cast, text
 from sqlalchemy.dialects.postgresql import ENUM as PGEnum
 from datetime import datetime
 import enum

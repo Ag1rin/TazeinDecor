@@ -2,7 +2,7 @@
 Database configuration and session management
 """
 import os
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from app.config import settings
@@ -23,9 +23,17 @@ if "sqlite" in settings.DATABASE_URL.lower():
         os.makedirs(db_dir, exist_ok=True)
 
 # Create database engine
+# For PostgreSQL, set timezone to Asia/Tehran
+connect_args = {}
+if "sqlite" in settings.DATABASE_URL.lower():
+    connect_args = {"check_same_thread": False}
+elif "postgresql" in settings.DATABASE_URL.lower():
+    # Set timezone to Asia/Tehran for PostgreSQL connections
+    connect_args = {"options": "-c timezone=Asia/Tehran"}
+
 engine = create_engine(
     settings.DATABASE_URL,
-    connect_args={"check_same_thread": False} if "sqlite" in settings.DATABASE_URL else {},
+    connect_args=connect_args,
     pool_pre_ping=True  # Verify connections before using
 )
 
@@ -40,6 +48,9 @@ def get_db():
     """Dependency for getting database session"""
     db = SessionLocal()
     try:
+        # Set timezone to Asia/Tehran for PostgreSQL connections
+        if "postgresql" in settings.DATABASE_URL.lower():
+            db.execute(text("SET timezone = 'Asia/Tehran'"))
         yield db
     finally:
         db.close()

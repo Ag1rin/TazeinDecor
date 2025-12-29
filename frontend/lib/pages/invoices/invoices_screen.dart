@@ -91,11 +91,24 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
           });
         }
         // Load product details for return items
+        final order = _returnOrdersCache[returnItem.orderId];
         for (final item in returnItem.items) {
           final itemData = item as Map<String, dynamic>;
           final productId = itemData['product_id'] as int?;
           if (productId != null && !_productDetailsCache.containsKey(productId)) {
-            _loadProductDetails(productId);
+            // Try to get wooId from order items
+            int? wooId;
+            if (order != null) {
+              try {
+                final orderItem = order.items.firstWhere(
+                  (item) => item.productId == productId,
+                );
+                wooId = orderItem.product?.wooId;
+              } catch (e) {
+                // Product not found in order items
+              }
+            }
+            _loadProductDetailsForReturn(productId, wooId ?? productId);
           }
         }
       }
@@ -448,32 +461,63 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
     // Get product name - try multiple sources
     String productName = 'نامشخص';
     
-    // First try from product details cache (from secure API)
-    if (productId != null && _productDetailsCache.containsKey(productId)) {
-      final productDetails = _productDetailsCache[productId];
-      if (productDetails != null && productDetails['name'] != null) {
-        productName = productDetails['name'].toString();
-      }
-    }
-    
-    // If not found, try from order items
-    if (productName == 'نامشخص' && order != null && productId != null && order.items.isNotEmpty) {
+    // First try from order items (most reliable source)
+    if (order != null && productId != null && order.items.isNotEmpty) {
       try {
         final orderItem = order.items.firstWhere(
           (item) => item.productId == productId,
         );
         if (orderItem.product != null && orderItem.product!.name.isNotEmpty) {
           productName = orderItem.product!.name;
+          print('✅ Product name from order item: $productName (productId: $productId)');
         }
       } catch (e) {
-        // Product not found in order items
+        print('⚠️ Product $productId not found in order items: $e');
+        // Try to find by matching all items
+        for (final item in order.items) {
+          if (item.product != null && item.product!.id == productId) {
+            productName = item.product!.name;
+            print('✅ Product name found by matching id: $productName');
+            break;
+          }
+        }
       }
     }
     
-    // If still not found, load from API
-    if (productName == 'نامشخص' && productId != null && !_productDetailsCache.containsKey(productId)) {
-      _loadProductDetails(productId);
+    // If not found, try from product details cache (from secure API)
+    if (productName == 'نامشخص' && productId != null && _productDetailsCache.containsKey(productId)) {
+      final productDetails = _productDetailsCache[productId];
+      if (productDetails != null && productDetails['name'] != null) {
+        productName = productDetails['name'].toString();
+        print('✅ Product name from cache: $productName');
+      }
     }
+    
+    // If still not found, try to load from API using order item's wooId
+    if (productName == 'نامشخص' && order != null && productId != null && order.items.isNotEmpty) {
+      try {
+        final orderItem = order.items.firstWhere(
+          (item) => item.productId == productId,
+        );
+        final wooId = orderItem.product?.wooId;
+        if (wooId != null && 
+            !_productDetailsCache.containsKey(productId) && 
+            (_loadingProductDetails[productId] != true)) {
+          _loadProductDetailsForReturn(productId, wooId);
+        }
+      } catch (e) {
+        // Try to load with productId as wooId
+        if (!_productDetailsCache.containsKey(productId) && 
+            (_loadingProductDetails[productId] != true)) {
+          _loadProductDetailsForReturn(productId, productId);
+        }
+      }
+    }
+
+    // Check if product details are loading
+    final isLoadingProduct = productId != null && 
+        _loadingProductDetails[productId] == true &&
+        productName == 'نامشخص';
 
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
@@ -483,9 +527,21 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              productName,
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    productName,
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                  ),
+                ),
+                if (isLoadingProduct)
+                  const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+              ],
             ),
             const SizedBox(height: 8),
             Row(
@@ -543,46 +599,23 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
     }
   }
 
-  Future<void> _loadProductDetails(int productId) async {
-    if (_productDetailsCache.containsKey(productId) ||
-        _loadingProductDetails[productId] == true) {
-      return; // Already loaded or loading
-    }
-
-    setState(() {
-      _loadingProductDetails[productId] = true;
-    });
-
+  Future<void> _loadProductDetailsForReturn(int productId, int wooId) async {
     try {
-      // Get product from order to find wooId
-      int? wooId;
-      for (final order in _returnOrdersCache.values) {
-        if (order != null) {
-          try {
-            final orderItem = order.items.firstWhere(
-              (item) => item.productId == productId,
-            );
-            wooId = orderItem.product?.wooId ?? productId;
-            break;
-          } catch (e) {
-            continue;
-          }
-        }
-      }
-      
-      final data = await _productService.getProductFromSecureAPI(wooId ?? productId);
+      final data = await _productService.getProductFromSecureAPI(wooId);
       if (mounted && data != null) {
         setState(() {
           _productDetailsCache[productId] = data;
           _loadingProductDetails[productId] = false;
         });
+        print('✅ Loaded product details for productId=$productId, wooId=$wooId, name=${data['name']}');
       } else {
         setState(() {
           _loadingProductDetails[productId] = false;
         });
+        print('⚠️ No data received for productId=$productId, wooId=$wooId');
       }
     } catch (e) {
-      print('Error loading product details for $productId: $e');
+      print('❌ Error loading product details for productId=$productId, wooId=$wooId: $e');
       if (mounted) {
         setState(() {
           _loadingProductDetails[productId] = false;
