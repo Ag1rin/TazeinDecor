@@ -124,7 +124,9 @@ async def create_company(
         mobile=company_data.mobile,
         address=company_data.address,
         logo=company_data.logo,
-        notes=company_data.notes
+        notes=company_data.notes,
+        brand_name=company_data.brand_name,
+        brand_thumbnail=company_data.brand_thumbnail
     )
     
     db.add(company)
@@ -151,6 +153,8 @@ async def update_company(
     company.address = company_data.address
     company.logo = company_data.logo
     company.notes = company_data.notes
+    company.brand_name = company_data.brand_name
+    company.brand_thumbnail = company_data.brand_thumbnail
     
     db.commit()
     db.refresh(company)
@@ -212,6 +216,56 @@ async def upload_logo(
     db.commit()
     
     return {"message": "Logo uploaded", "filename": filename}
+
+
+@router.post("/{company_id}/brand-thumbnail")
+async def upload_brand_thumbnail(
+    company_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.OPERATOR))
+):
+    """Upload brand thumbnail (Operator only)"""
+    company = db.query(Company).filter(Company.id == company_id).first()
+    if not company:
+        raise HTTPException(status_code=404, detail="شرکت یافت نشد")
+    
+    # Use the same upload directory as configured in main.py
+    upload_dir = os.getenv("UPLOAD_DIR", settings.UPLOAD_DIR)
+    try:
+        os.makedirs(upload_dir, exist_ok=True)
+        if not os.access(upload_dir, os.W_OK):
+            raise OSError("Directory is not writable")
+    except (OSError, PermissionError) as e:
+        upload_dir = tempfile.gettempdir()
+        upload_dir = os.path.join(upload_dir, "uploads")
+        os.makedirs(upload_dir, exist_ok=True)
+        print(f"⚠️  Using temp directory for uploads: {upload_dir}")
+    
+    # Generate unique filename
+    file_ext = os.path.splitext(file.filename)[1]
+    filename = f"brand_thumbnail_{company_id}_{uuid.uuid4()}{file_ext}"
+    file_path = os.path.join(upload_dir, filename)
+    
+    # Save file with error handling
+    try:
+        content = await file.read()
+        with open(file_path, "wb") as f:
+            f.write(content)
+    except OSError as e:
+        if "read-only" in str(e).lower() or "permission denied" in str(e).lower():
+            upload_dir = tempfile.gettempdir()
+            file_path = os.path.join(upload_dir, filename)
+            with open(file_path, "wb") as f:
+                f.write(content)
+            print(f"⚠️  Saved to temp directory: {file_path}")
+        else:
+            raise HTTPException(status_code=500, detail=f"خطا در ذخیره فایل: {str(e)}")
+    
+    company.brand_thumbnail = filename
+    db.commit()
+    
+    return {"message": "Brand thumbnail uploaded", "filename": filename}
 
 
 @router.delete("/{company_id}")

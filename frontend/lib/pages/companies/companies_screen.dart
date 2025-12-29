@@ -24,15 +24,23 @@ class _CompaniesScreenState extends State<CompaniesScreen> {
   @override
   void initState() {
     super.initState();
-    _loadCompanies();
+    // Defer loading until after the first frame is built
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadCompanies();
+    });
   }
 
   Future<void> _loadCompanies() async {
+    if (!mounted) return;
+    
     setState(() {
       _isLoading = true;
     });
 
     final companies = await _companyService.getCompanies();
+    
+    if (!mounted) return;
+    
     setState(() {
       _companies = companies;
       _isLoading = false;
@@ -45,12 +53,17 @@ class _CompaniesScreenState extends State<CompaniesScreen> {
       builder: (context) => const AddCompanyDialog(),
     );
 
-    if (result != null) {
+    if (result != null && mounted) {
       final company = await _companyService.createCompany(result);
-      if (company != null) {
+      if (company != null && mounted) {
         Fluttertoast.showToast(msg: 'شرکت با موفقیت اضافه شد');
-        _loadCompanies();
-      } else {
+        // Use post frame callback to avoid setState during build
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            _loadCompanies();
+          }
+        });
+      } else if (mounted) {
         Fluttertoast.showToast(msg: 'خطا در افزودن شرکت');
       }
     }
@@ -62,12 +75,17 @@ class _CompaniesScreenState extends State<CompaniesScreen> {
       builder: (context) => EditCompanyDialog(company: company),
     );
 
-    if (result != null) {
+    if (result != null && mounted) {
       final updated = await _companyService.updateCompany(company.id, result);
-      if (updated != null) {
+      if (updated != null && mounted) {
         Fluttertoast.showToast(msg: 'شرکت با موفقیت به‌روزرسانی شد');
-        _loadCompanies();
-      } else {
+        // Use post frame callback to avoid setState during build
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            _loadCompanies();
+          }
+        });
+      } else if (mounted) {
         Fluttertoast.showToast(msg: 'خطا در به‌روزرسانی شرکت');
       }
     }
@@ -76,13 +94,37 @@ class _CompaniesScreenState extends State<CompaniesScreen> {
   Future<void> _uploadLogo(CompanyModel company) async {
     final picker = ImagePicker();
     final image = await picker.pickImage(source: ImageSource.gallery);
-    if (image != null) {
+    if (image != null && mounted) {
       final success = await _companyService.uploadLogo(company.id, image.path);
-      if (success) {
+      if (success && mounted) {
         Fluttertoast.showToast(msg: 'لوگو با موفقیت آپلود شد');
-        _loadCompanies();
-      } else {
+        // Use post frame callback to avoid setState during build
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            _loadCompanies();
+          }
+        });
+      } else if (mounted) {
         Fluttertoast.showToast(msg: 'خطا در آپلود لوگو');
+      }
+    }
+  }
+
+  Future<void> _uploadBrandThumbnail(CompanyModel company) async {
+    final picker = ImagePicker();
+    final image = await picker.pickImage(source: ImageSource.gallery);
+    if (image != null && mounted) {
+      final success = await _companyService.uploadBrandThumbnail(company.id, image.path);
+      if (success && mounted) {
+        Fluttertoast.showToast(msg: 'عکس برند با موفقیت آپلود شد');
+        // Use post frame callback to avoid setState during build
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            _loadCompanies();
+          }
+        });
+      } else if (mounted) {
+        Fluttertoast.showToast(msg: 'خطا در آپلود عکس برند');
       }
     }
   }
@@ -108,12 +150,17 @@ class _CompaniesScreenState extends State<CompaniesScreen> {
       ),
     );
 
-    if (confirmed == true) {
+    if (confirmed == true && mounted) {
       final success = await _companyService.deleteCompany(company.id);
-      if (success) {
+      if (success && mounted) {
         Fluttertoast.showToast(msg: 'شرکت با موفقیت حذف شد');
-        _loadCompanies();
-      } else {
+        // Use post frame callback to avoid setState during build
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            _loadCompanies();
+          }
+        });
+      } else if (mounted) {
         Fluttertoast.showToast(msg: 'خطا در حذف شرکت');
       }
     }
@@ -135,7 +182,9 @@ class _CompaniesScreenState extends State<CompaniesScreen> {
             : _companies.isEmpty
             ? const Center(child: Text('شرکتی یافت نشد'))
             : RefreshIndicator(
-                onRefresh: _loadCompanies,
+                onRefresh: () async {
+                  await _loadCompanies();
+                },
                 child: ListView.builder(
                   padding: const EdgeInsets.all(16),
                   itemCount: _companies.length,
@@ -155,13 +204,7 @@ class _CompaniesScreenState extends State<CompaniesScreen> {
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: ListTile(
-        leading: company.logo != null
-            ? CircleAvatar(
-                backgroundImage: NetworkImage(
-                  '${AppConfig.baseUrl}/uploads/${company.logo}',
-                ),
-              )
-            : const CircleAvatar(child: Icon(Icons.business)),
+        leading: _buildCompanyAvatar(company),
         title: Row(
           children: [
             Expanded(child: Text(company.name)),
@@ -188,6 +231,15 @@ class _CompaniesScreenState extends State<CompaniesScreen> {
           children: [
             if (company.mobile != null) Text('موبایل: ${company.mobile}'),
             if (company.address != null) Text('آدرس: ${company.address}'),
+            if (company.brandName != null && company.brandName!.isNotEmpty)
+              Text(
+                'نام برند: ${company.brandName}',
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.blue,
+                ),
+              ),
             if (isVirtualCompany)
               const Text(
                 'برند از ووکامرس',
@@ -214,6 +266,11 @@ class _CompaniesScreenState extends State<CompaniesScreen> {
                     tooltip: 'آپلود لوگو',
                   ),
                   IconButton(
+                    icon: const Icon(Icons.photo),
+                    onPressed: () => _uploadBrandThumbnail(company),
+                    tooltip: 'آپلود عکس برند',
+                  ),
+                  IconButton(
                     icon: const Icon(Icons.delete, color: Colors.red),
                     onPressed: () => _deleteCompany(company),
                     tooltip: 'حذف شرکت',
@@ -222,6 +279,27 @@ class _CompaniesScreenState extends State<CompaniesScreen> {
               ),
       ),
     );
+  }
+
+  Widget _buildCompanyAvatar(CompanyModel company) {
+    // Prefer brand thumbnail, then logo, then default icon
+    String? imageUrl;
+    if (company.brandThumbnail != null && company.brandThumbnail!.isNotEmpty) {
+      imageUrl = '${AppConfig.baseUrl}/uploads/${company.brandThumbnail}';
+    } else if (company.logo != null && company.logo!.isNotEmpty) {
+      imageUrl = '${AppConfig.baseUrl}/uploads/${company.logo}';
+    }
+    
+    if (imageUrl != null) {
+      return CircleAvatar(
+        backgroundImage: NetworkImage(imageUrl),
+        onBackgroundImageError: (exception, stackTrace) {
+          // Silently handle image loading errors to prevent rebuild issues
+        },
+      );
+    }
+    
+    return const CircleAvatar(child: Icon(Icons.business));
   }
 }
 
@@ -238,6 +316,7 @@ class _AddCompanyDialogState extends State<AddCompanyDialog> {
   final _mobileController = TextEditingController();
   final _addressController = TextEditingController();
   final _notesController = TextEditingController();
+  final _brandNameController = TextEditingController();
 
   @override
   void dispose() {
@@ -245,6 +324,7 @@ class _AddCompanyDialogState extends State<AddCompanyDialog> {
     _mobileController.dispose();
     _addressController.dispose();
     _notesController.dispose();
+    _brandNameController.dispose();
     super.dispose();
   }
 
@@ -282,6 +362,15 @@ class _AddCompanyDialogState extends State<AddCompanyDialog> {
                   decoration: const InputDecoration(labelText: 'یادداشت'),
                   maxLines: 3,
                 ),
+                const SizedBox(height: 8),
+                TextFormField(
+                  controller: _brandNameController,
+                  decoration: const InputDecoration(
+                    labelText: 'نام برند',
+                    hintText: 'نام برند برای تطبیق با محصولات',
+                    helperText: 'اگر نام برند با نام برند محصولات یکسان باشد، محصولات به این شرکت اختصاص می‌یابند',
+                  ),
+                ),
               ],
             ),
           ),
@@ -308,6 +397,10 @@ class _AddCompanyDialogState extends State<AddCompanyDialog> {
                     notes: _notesController.text.isEmpty
                         ? null
                         : _notesController.text,
+                    brandName: _brandNameController.text.isEmpty
+                        ? null
+                        : _brandNameController.text,
+                    brandThumbnail: null,
                     createdAt: DateTime.now(),
                   ),
                 );
@@ -336,6 +429,7 @@ class _EditCompanyDialogState extends State<EditCompanyDialog> {
   late TextEditingController _mobileController;
   late TextEditingController _addressController;
   late TextEditingController _notesController;
+  late TextEditingController _brandNameController;
 
   @override
   void initState() {
@@ -348,6 +442,9 @@ class _EditCompanyDialogState extends State<EditCompanyDialog> {
       text: widget.company.address ?? '',
     );
     _notesController = TextEditingController(text: widget.company.notes ?? '');
+    _brandNameController = TextEditingController(
+      text: widget.company.brandName ?? '',
+    );
   }
 
   @override
@@ -356,6 +453,7 @@ class _EditCompanyDialogState extends State<EditCompanyDialog> {
     _mobileController.dispose();
     _addressController.dispose();
     _notesController.dispose();
+    _brandNameController.dispose();
     super.dispose();
   }
 
@@ -390,6 +488,15 @@ class _EditCompanyDialogState extends State<EditCompanyDialog> {
                   decoration: const InputDecoration(labelText: 'یادداشت'),
                   maxLines: 3,
                 ),
+                const SizedBox(height: 8),
+                TextFormField(
+                  controller: _brandNameController,
+                  decoration: const InputDecoration(
+                    labelText: 'نام برند',
+                    hintText: 'نام برند برای تطبیق با محصولات',
+                    helperText: 'اگر نام برند با نام برند محصولات یکسان باشد، محصولات به این شرکت اختصاص می‌یابند',
+                  ),
+                ),
               ],
             ),
           ),
@@ -415,6 +522,10 @@ class _EditCompanyDialogState extends State<EditCompanyDialog> {
                   notes: _notesController.text.isEmpty
                       ? null
                       : _notesController.text,
+                  brandName: _brandNameController.text.isEmpty
+                      ? null
+                      : _brandNameController.text,
+                  brandThumbnail: widget.company.brandThumbnail,
                   logo: widget.company.logo,
                   createdAt: widget.company.createdAt,
                 ),

@@ -32,8 +32,8 @@ class _InvoiceSelectionScreenState extends State<InvoiceSelectionScreen> {
   bool _isLoading = false;
   bool _isGeneratingPdfs = false;
   
-  // Brand selection
-  Map<String, bool> _selectedBrands = {};
+  // Brand selection - only one brand can be selected
+  String? _selectedBrand;
   Map<String, CompanyModel?> _brandToCompany = {};
   List<String> _availableBrands = [];
   
@@ -142,32 +142,48 @@ class _InvoiceSelectionScreenState extends State<InvoiceSelectionScreen> {
             brands.add(brand);
             
             // Find company for this brand
-            // Check if company name matches brand, or if brand is in company notes
-            // Notes can contain brands separated by comma, semicolon, or newline
+            // Priority: 1. brand_name field, 2. company name, 3. notes field
             CompanyModel? company;
+            final brandLower = brand.toLowerCase();
+            
             for (final comp in companies) {
-              // Check if company name matches brand
-              if (comp.name.toLowerCase() == brand.toLowerCase()) {
-                company = comp;
-                break;
-              }
-              
-              // Check if brand is in company notes (supports comma, semicolon, newline separated)
-              if (comp.notes != null && comp.notes!.isNotEmpty) {
-                final notesLower = comp.notes!.toLowerCase();
-                final brandLower = brand.toLowerCase();
-                
-                // Split by common separators
-                final brandList = notesLower
-                    .split(RegExp(r'[,;\n\r]+'))
-                    .map((b) => b.trim())
-                    .where((b) => b.isNotEmpty)
-                    .toList();
-                
-                // Check if brand matches any in the list
-                if (brandList.any((b) => b == brandLower || b.contains(brandLower))) {
+              // First priority: Check if brand_name matches brand
+              if (comp.brandName != null && comp.brandName!.isNotEmpty) {
+                if (comp.brandName!.toLowerCase().trim() == brandLower.trim()) {
                   company = comp;
                   break;
+                }
+              }
+            }
+            
+            // Second priority: Check if company name matches brand
+            if (company == null) {
+              for (final comp in companies) {
+                if (comp.name.toLowerCase() == brandLower) {
+                  company = comp;
+                  break;
+                }
+              }
+            }
+            
+            // Third priority: Check if brand is in company notes
+            if (company == null) {
+              for (final comp in companies) {
+                if (comp.notes != null && comp.notes!.isNotEmpty) {
+                  final notesLower = comp.notes!.toLowerCase();
+                  
+                  // Split by common separators
+                  final brandList = notesLower
+                      .split(RegExp(r'[,;\n\r]+'))
+                      .map((b) => b.trim())
+                      .where((b) => b.isNotEmpty)
+                      .toList();
+                  
+                  // Check if brand matches any in the list
+                  if (brandList.any((b) => b == brandLower || b.contains(brandLower))) {
+                    company = comp;
+                    break;
+                  }
                 }
               }
             }
@@ -179,7 +195,7 @@ class _InvoiceSelectionScreenState extends State<InvoiceSelectionScreen> {
       setState(() {
         _availableBrands = brands.toList()..sort();
         _brandToCompany = brandToCompany;
-        _selectedBrands = {for (var brand in _availableBrands) brand: true};
+        _selectedBrand = null; // No brand selected initially
         _isLoading = false;
       });
       
@@ -196,10 +212,15 @@ class _InvoiceSelectionScreenState extends State<InvoiceSelectionScreen> {
   }
   
   void _showBrandSelectionDialog() {
+    if (_availableBrands.isEmpty) {
+      Fluttertoast.showToast(msg: 'برندی در فاکتورهای انتخاب شده یافت نشد');
+      return;
+    }
+    
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('انتخاب برندها'),
+        title: const Text('انتخاب برند'),
         content: SizedBox(
           width: double.maxFinite,
           child: ListView.builder(
@@ -209,15 +230,16 @@ class _InvoiceSelectionScreenState extends State<InvoiceSelectionScreen> {
               final brand = _availableBrands[index];
               final company = _brandToCompany[brand];
               
-              return CheckboxListTile(
+              return RadioListTile<String>(
                 title: Text(brand),
                 subtitle: company != null
                     ? Text('شرکت: ${company.name}')
                     : const Text('شرکت یافت نشد', style: TextStyle(color: Colors.orange)),
-                value: _selectedBrands[brand] ?? false,
+                value: brand,
+                groupValue: _selectedBrand,
                 onChanged: (value) {
                   setState(() {
-                    _selectedBrands[brand] = value ?? false;
+                    _selectedBrand = value;
                   });
                 },
               );
@@ -228,28 +250,18 @@ class _InvoiceSelectionScreenState extends State<InvoiceSelectionScreen> {
           TextButton(
             onPressed: () {
               setState(() {
-                for (var brand in _availableBrands) {
-                  _selectedBrands[brand] = false;
-                }
+                _selectedBrand = null;
               });
             },
-            child: const Text('لغو انتخاب همه'),
+            child: const Text('لغو انتخاب'),
           ),
-          TextButton(
-            onPressed: () {
-              setState(() {
-                for (var brand in _availableBrands) {
-                  _selectedBrands[brand] = true;
-                }
-              });
-            },
-            child: const Text('انتخاب همه'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _generatePdfs();
-            },
+          ElevatedButton(
+            onPressed: _selectedBrand == null
+                ? null
+                : () {
+                    Navigator.pop(context);
+                    _generatePdf();
+                  },
             child: const Text('تولید PDF'),
           ),
           TextButton(
@@ -261,14 +273,9 @@ class _InvoiceSelectionScreenState extends State<InvoiceSelectionScreen> {
     );
   }
   
-  Future<void> _generatePdfs() async {
-    final selectedBrands = _selectedBrands.entries
-        .where((e) => e.value)
-        .map((e) => e.key)
-        .toList();
-    
-    if (selectedBrands.isEmpty) {
-      Fluttertoast.showToast(msg: 'لطفا حداقل یک برند انتخاب کنید');
+  Future<void> _generatePdf() async {
+    if (_selectedBrand == null || _selectedBrand!.isEmpty) {
+      Fluttertoast.showToast(msg: 'لطفا یک برند انتخاب کنید');
       return;
     }
     
@@ -289,11 +296,13 @@ class _InvoiceSelectionScreenState extends State<InvoiceSelectionScreen> {
         return;
       }
       
-      // Group items by brand
-      final Map<String, List<OrderItemModel>> brandItems = {};
-      final Map<String, List<OrderModel>> brandOrders = {};
+      // Filter items by selected brand
+      final List<OrderItemModel> brandItems = [];
+      final List<OrderModel> brandOrders = [];
       
       for (final invoice in selectedInvoices) {
+        bool invoiceHasBrandItems = false;
+        
         for (final item in invoice.items) {
           String? brand;
           
@@ -312,62 +321,53 @@ class _InvoiceSelectionScreenState extends State<InvoiceSelectionScreen> {
           brand ??= item.effectiveBrand;
           brand ??= 'بدون برند';
           
-          // Only process selected brands
-          if (!selectedBrands.contains(brand)) continue;
-          
-          if (!brandItems.containsKey(brand)) {
-            brandItems[brand] = [];
-            brandOrders[brand] = [];
+          // Only process items with selected brand
+          if (brand == _selectedBrand) {
+            brandItems.add(item);
+            invoiceHasBrandItems = true;
           }
-          
-          brandItems[brand]!.add(item);
-          if (!brandOrders[brand]!.any((o) => o.id == invoice.id)) {
-            brandOrders[brand]!.add(invoice);
-          }
+        }
+        
+        // Add invoice if it has items with selected brand
+        if (invoiceHasBrandItems && !brandOrders.any((o) => o.id == invoice.id)) {
+          brandOrders.add(invoice);
         }
       }
       
-      // Generate PDF for each selected brand
-      final List<Uint8List> pdfs = [];
-      final List<String> brandNames = [];
-      
-      for (final brand in selectedBrands) {
-        if (!brandItems.containsKey(brand)) continue;
-        
-        final items = brandItems[brand]!;
-        final orders = brandOrders[brand]!;
-        final company = _brandToCompany[brand];
-        
-        // Generate period label
-        final dates = orders.map((o) => o.createdAt).toList()..sort();
-        final startDate = dates.first;
-        final endDate = dates.last;
-        final periodLabel = startDate.year == endDate.year &&
-                startDate.month == endDate.month &&
-                startDate.day == endDate.day
-            ? PersianDate.formatDate(startDate)
-            : '${PersianDate.formatDate(startDate)} تا ${PersianDate.formatDate(endDate)}';
-        
-        // Generate PDF
-        final pdfBytes = await AggregatedPdfService.generateBrandInvoicePdf(
-          brandName: brand,
-          items: items,
-          orders: orders,
-          periodLabel: periodLabel,
-          periodDate: startDate,
-          company: company,
-        );
-        
-        pdfs.add(pdfBytes);
-        brandNames.add(brand);
+      if (brandItems.isEmpty) {
+        Fluttertoast.showToast(msg: 'هیچ محصولی با برند "${_selectedBrand}" در فاکتورهای انتخاب شده یافت نشد');
+        return;
       }
+      
+      // Get company for selected brand
+      final company = _brandToCompany[_selectedBrand];
+      
+      // Generate period label
+      final dates = brandOrders.map((o) => o.createdAt).toList()..sort();
+      final startDate = dates.first;
+      final endDate = dates.last;
+      final periodLabel = startDate.year == endDate.year &&
+              startDate.month == endDate.month &&
+              startDate.day == endDate.day
+          ? PersianDate.formatDate(startDate)
+          : '${PersianDate.formatDate(startDate)} تا ${PersianDate.formatDate(endDate)}';
+      
+      // Generate PDF
+      final pdfBytes = await AggregatedPdfService.generateBrandInvoicePdf(
+        brandName: _selectedBrand!,
+        items: brandItems,
+        orders: brandOrders,
+        periodLabel: periodLabel,
+        periodDate: startDate,
+        company: company,
+      );
       
       // Show PDF preview/share dialog
-      if (mounted && pdfs.isNotEmpty) {
-        await _showPdfPreviewDialog(pdfs, brandNames);
+      if (mounted) {
+        await _showPdfPreviewDialog([pdfBytes], [_selectedBrand!]);
       }
     } catch (e) {
-      print('❌ Error generating PDFs: $e');
+      print('❌ Error generating PDF: $e');
       if (mounted) {
         Fluttertoast.showToast(msg: 'خطا در تولید PDF: $e');
       }
@@ -389,7 +389,7 @@ class _InvoiceSelectionScreenState extends State<InvoiceSelectionScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('PDF های تولید شده (${pdfs.length} فایل)'),
+        title: Text('PDF تولید شده - برند: ${brandNames.first}'),
         content: SizedBox(
           width: double.maxFinite,
           height: 400,
@@ -398,32 +398,9 @@ class _InvoiceSelectionScreenState extends State<InvoiceSelectionScreen> {
           ),
         ),
         actions: [
-          if (pdfs.length > 1)
-            TextButton(
-              onPressed: () async {
-                // Share all PDFs
-                for (int i = 0; i < pdfs.length; i++) {
-                  final tempDir = await getTemporaryDirectory();
-                  final file = File(
-                    '${tempDir.path}/فاکتور_${brandNames[i]}_${DateTime.now().millisecondsSinceEpoch}.pdf',
-                  );
-                  await file.writeAsBytes(pdfs[i]);
-                  await Share.shareXFiles(
-                    [XFile(file.path)],
-                    text: 'فاکتور ${brandNames[i]}',
-                  );
-                }
-                if (mounted) {
-                  Fluttertoast.showToast(
-                    msg: 'تمام PDF ها به اشتراک گذاشته شدند',
-                  );
-                }
-              },
-              child: const Text('اشتراک‌گذاری همه'),
-            ),
           TextButton(
             onPressed: () async {
-              // Share first PDF
+              // Share PDF
               final tempDir = await getTemporaryDirectory();
               final file = File(
                 '${tempDir.path}/فاکتور_${brandNames.first}_${DateTime.now().millisecondsSinceEpoch}.pdf',

@@ -285,6 +285,8 @@ class CompanyCreate(BaseModel):
     address: Optional[str] = None
     logo: Optional[str] = None
     notes: Optional[str] = None
+    brand_name: Optional[str] = None  # Brand name to match with product brands
+    brand_thumbnail: Optional[str] = None  # Thumbnail image for the brand
 
 
 class CompanyResponse(BaseModel):
@@ -294,6 +296,8 @@ class CompanyResponse(BaseModel):
     address: Optional[str]
     logo: Optional[str]
     notes: Optional[str]
+    brand_name: Optional[str] = None  # Brand name to match with product brands
+    brand_thumbnail: Optional[str] = None  # Thumbnail image for the brand
     created_at: Optional[datetime] = None  # Allow None for virtual companies from brands
     
     class Config:

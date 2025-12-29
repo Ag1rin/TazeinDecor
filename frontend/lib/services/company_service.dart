@@ -8,6 +8,8 @@ class CompanyModel {
   final String? address;
   final String? logo;
   final String? notes;
+  final String? brandName;  // Brand name to match with product brands
+  final String? brandThumbnail;  // Thumbnail image for the brand
   final DateTime createdAt;
   
   CompanyModel({
@@ -17,6 +19,8 @@ class CompanyModel {
     this.address,
     this.logo,
     this.notes,
+    this.brandName,
+    this.brandThumbnail,
     required this.createdAt,
   });
   
@@ -28,6 +32,8 @@ class CompanyModel {
       address: json['address'],
       logo: json['logo'],
       notes: json['notes'],
+      brandName: json['brand_name'],
+      brandThumbnail: json['brand_thumbnail'],
       createdAt: json['created_at'] != null 
           ? DateTime.parse(json['created_at'])
           : DateTime.now(), // Fallback for virtual companies from brands
@@ -41,6 +47,8 @@ class CompanyModel {
       'address': address,
       'logo': logo,
       'notes': notes,
+      'brand_name': brandName,
+      'brand_thumbnail': brandThumbnail,
     };
   }
 }
@@ -89,6 +97,15 @@ class CompanyService {
   Future<bool> uploadLogo(int companyId, String logoPath) async {
     try {
       final response = await _api.postFile('/companies/$companyId/logo', logoPath);
+      return response.statusCode == 200;
+    } catch (e) {
+      return false;
+    }
+  }
+  
+  Future<bool> uploadBrandThumbnail(int companyId, String thumbnailPath) async {
+    try {
+      final response = await _api.postFile('/companies/$companyId/brand-thumbnail', thumbnailPath);
       return response.statusCode == 200;
     } catch (e) {
       return false;

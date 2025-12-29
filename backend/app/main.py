@@ -346,6 +346,38 @@ async def lifespan(app: FastAPI):
                             print(f"⚠️  Could not add cooperation_total_amount: {e}")
                 else:
                     print("ℹ️  Column cooperation_total_amount already exists in orders table")
+                
+                # Migration 11: Add brand_name and brand_thumbnail to companies
+                if "companies" in inspector.get_table_names():
+                    company_columns = [col['name'] for col in inspector.get_columns("companies")]
+                    
+                    if "brand_name" not in company_columns:
+                        try:
+                            with engine.begin() as conn:
+                                if is_postgres:
+                                    conn.execute(text("ALTER TABLE companies ADD COLUMN IF NOT EXISTS brand_name VARCHAR"))
+                                else:
+                                    conn.execute(text("ALTER TABLE companies ADD COLUMN brand_name TEXT"))
+                                print("✅ Added brand_name column to companies")
+                        except Exception as e:
+                            if "already exists" not in str(e).lower() and "duplicate" not in str(e).lower():
+                                print(f"⚠️  Could not add brand_name: {e}")
+                    else:
+                        print("ℹ️  Column brand_name already exists in companies table")
+                    
+                    if "brand_thumbnail" not in company_columns:
+                        try:
+                            with engine.begin() as conn:
+                                if is_postgres:
+                                    conn.execute(text("ALTER TABLE companies ADD COLUMN IF NOT EXISTS brand_thumbnail VARCHAR"))
+                                else:
+                                    conn.execute(text("ALTER TABLE companies ADD COLUMN brand_thumbnail TEXT"))
+                                print("✅ Added brand_thumbnail column to companies")
+                        except Exception as e:
+                            if "already exists" not in str(e).lower() and "duplicate" not in str(e).lower():
+                                print(f"⚠️  Could not add brand_thumbnail: {e}")
+                    else:
+                        print("ℹ️  Column brand_thumbnail already exists in companies table")
                         
         except ImportError as import_error:
             # Migration file might not be accessible, that's okay
