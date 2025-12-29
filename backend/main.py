@@ -29,6 +29,8 @@ if __name__ == "__main__":
     # Liara uses port 80 by default if PORT is not set
     # Default to 80 for Liara/production, 8000 for local development
     from app.config import settings
+    
+    # Get PORT from environment, with proper fallback
     port_env = os.getenv("PORT")
     if port_env and port_env.strip():
         try:
@@ -40,14 +42,17 @@ if __name__ == "__main__":
         # No PORT env var set, use default from settings (80 for Liara)
         port = settings.PORT
     
-    # Ensure port is always a valid integer
+    # Ensure port is always a valid integer (final safety check)
     if not isinstance(port, int) or port <= 0:
         port = 80  # Final fallback to port 80 for Liara
+    
+    # Print port for debugging (helps in deployment logs)
+    print(f"🚀 Starting server on port {port} (ENVIRONMENT={os.getenv('ENVIRONMENT', 'development')})")
     
     # Production configuration
     if is_production:
         uvicorn.run(
-            "app.main:app",
+            app="app.main:app",
             host="0.0.0.0",  # Listen on all interfaces
             port=port,
             log_level="info",
@@ -58,7 +63,7 @@ if __name__ == "__main__":
     else:
         # Development configuration
         uvicorn.run(
-            "app.main:app",
+            app="app.main:app",
             host="0.0.0.0",
             port=port,
             log_level="info",  # Use info instead of debug to reduce noise
