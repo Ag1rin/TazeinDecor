@@ -184,21 +184,31 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
         body: Column(
           children: [
             // Status filter chips
-            Container(
-              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: [
-                    _buildFilterChip('سفارشات', _selectedStatus == null),
-                    const SizedBox(width: 8),
-                    _buildFilterChip(
-                      'مرجوعی‌ها',
-                      _selectedStatus == 'returned',
+            Consumer<AuthProvider>(
+              builder: (context, authProvider, _) {
+                final user = authProvider.user;
+                final isOperator = user?.isOperator == true;
+                
+                return Container(
+                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        _buildFilterChip('سفارشات', _selectedStatus == null),
+                        // Only show "مرجوعی‌ها" filter for non-operators
+                        if (!isOperator) ...[
+                          const SizedBox(width: 8),
+                          _buildFilterChip(
+                            'مرجوعی‌ها',
+                            _selectedStatus == 'returned',
+                          ),
+                        ],
+                      ],
                     ),
-                  ],
-                ),
-              ),
+                  ),
+                );
+              },
             ),
             const Divider(height: 1),
             // Invoices list or Returns list

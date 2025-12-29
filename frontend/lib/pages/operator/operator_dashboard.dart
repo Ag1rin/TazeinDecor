@@ -111,6 +111,41 @@ class _OperatorDashboardState extends State<OperatorDashboard>
       _returns = returns;
       _filteredReturns = returns;
     });
+    
+    // Load product details for all return items
+    for (final returnItem in returns) {
+      // Load order to get product details
+      try {
+        final order = await _orderService.getOrder(returnItem.orderId);
+        if (order != null) {
+          for (final item in returnItem.items) {
+            final itemData = item as Map<String, dynamic>;
+            final productId = itemData['product_id'] as int?;
+            if (productId != null) {
+              // Try to find order item to get wooId
+              try {
+                final orderItem = order.items.firstWhere(
+                  (item) => item.productId == productId,
+                );
+                final wooId = orderItem.product?.wooId ?? productId;
+                if (!_productDetailsCache.containsKey(productId) &&
+                    _loadingProductDetails[productId] != true) {
+                  _loadProductDetailsWithWooId(productId, wooId);
+                }
+              } catch (e) {
+                // Product not found in order, try with productId
+                if (!_productDetailsCache.containsKey(productId) &&
+                    _loadingProductDetails[productId] != true) {
+                  _loadProductDetailsWithWooId(productId, productId);
+                }
+              }
+            }
+          }
+        }
+      } catch (e) {
+        print('Error loading order for return ${returnItem.id}: $e');
+      }
+    }
   }
 
   void _filterReturns(String query) {
@@ -740,6 +775,23 @@ class _OperatorDashboardState extends State<OperatorDashboard>
   }
 
   Future<void> _loadProductDetails(int productId, int? variationId) async {
+    // Try to get wooId from orders
+    int? wooId;
+    for (final order in _orders) {
+      try {
+        final orderItem = order.items.firstWhere(
+          (item) => item.productId == productId,
+        );
+        wooId = orderItem.product?.wooId ?? productId;
+        break;
+      } catch (e) {
+        continue;
+      }
+    }
+    await _loadProductDetailsWithWooId(productId, wooId ?? productId);
+  }
+
+  Future<void> _loadProductDetailsWithWooId(int productId, int wooId) async {
     if (_productDetailsCache.containsKey(productId) ||
         _loadingProductDetails[productId] == true) {
       return; // Already loaded or loading
@@ -750,20 +802,22 @@ class _OperatorDashboardState extends State<OperatorDashboard>
     });
 
     try {
-      // Fetch from secure API
-      final data = await _productService.getProductFromSecureAPI(productId);
+      // Fetch from secure API using wooId
+      final data = await _productService.getProductFromSecureAPI(wooId);
       if (mounted && data != null) {
         setState(() {
           _productDetailsCache[productId] = data;
           _loadingProductDetails[productId] = false;
         });
+        print('✅ Loaded product details for productId=$productId, wooId=$wooId, name=${data['name']}');
       } else {
         setState(() {
           _loadingProductDetails[productId] = false;
         });
+        print('⚠️ No data received for productId=$productId, wooId=$wooId');
       }
     } catch (e) {
-      print('Error loading product details for $productId: $e');
+      print('❌ Error loading product details for productId=$productId, wooId=$wooId: $e');
       if (mounted) {
         setState(() {
           _loadingProductDetails[productId] = false;
@@ -802,13 +856,33 @@ class _OperatorDashboardState extends State<OperatorDashboard>
       attributes = productDetails['attributes'] as List<dynamic>?;
     }
 
-    final quantity = itemData['quantity'] ?? 0;
-    // Get calculator data from secure API response
-    final calculator = productDetails?['calculator'] as Map<String, dynamic>?;
-    final apiUnit = ProductUnitDisplay.getUnitFromCalculator(calculator);
+    final quantityValue = (itemData['quantity'] as num?)?.toDouble() ?? 0.0;
+    final quantity = quantityValue.toStringAsFixed(1);
+    
+    // Get unit from itemData first, then from API
+    final itemUnit = itemData['unit']?.toString();
+    String? apiUnit;
+    if (productDetails != null) {
+      // Get calculator data from secure API response
+      final calculator = productDetails['calculator'] as Map<String, dynamic>?;
+      apiUnit = ProductUnitDisplay.getUnitFromCalculator(calculator);
+    }
+    // Use item unit if API unit is not available
+    final displayUnit = apiUnit ?? itemUnit ?? 'package';
+    final persianUnit = ProductUnitDisplay.getDisplayUnit(displayUnit);
 
-    final productName =
-        productDetails?['name']?.toString() ?? 'محصول ${productId ?? 'نامشخص'}';
+    // Get product name - try multiple sources
+    String productName = 'نامشخص';
+    if (productDetails != null && productDetails['name'] != null) {
+      productName = productDetails['name'].toString();
+    } else if (productId != null) {
+      productName = 'محصول $productId';
+    }
+    
+    // If product details are loading, show loading indicator
+    if (isLoadingDetails && productName == 'نامشخص') {
+      productName = 'در حال بارگذاری...';
+    }
 
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
@@ -863,6 +937,7 @@ class _OperatorDashboardState extends State<OperatorDashboard>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Product name - always show
                   Row(
                     children: [
                       const Icon(
@@ -882,11 +957,32 @@ class _OperatorDashboardState extends State<OperatorDashboard>
                       ),
                     ],
                   ),
-                  if (brandName != null) ...[
+                  // Brand name - always show if available
+                  if (brandName != null && brandName.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.branding_watermark,
+                          size: 14,
+                          color: Colors.grey[600],
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          'برند: $brandName',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.grey[800],
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ] else if (isLoadingDetails) ...[
                     const SizedBox(height: 4),
                     Text(
-                      'برند/آلبوم: $brandName',
-                      style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+                      'در حال بارگذاری اطلاعات محصول...',
+                      style: TextStyle(fontSize: 12, color: Colors.grey[500]),
                     ),
                   ],
                   if (variationPattern != null) ...[
@@ -942,7 +1038,7 @@ class _OperatorDashboardState extends State<OperatorDashboard>
                   ],
                   const SizedBox(height: 4),
                   Text(
-                    'تعداد: ${ProductUnitDisplay.formatQuantityWithCoverage(quantity: quantity, apiUnit: apiUnit, calculator: calculator)}',
+                    'تعداد: ${PersianNumber.formatNumberString(quantity)} $persianUnit',
                     style: TextStyle(fontSize: 13, color: Colors.grey[700]),
                   ),
                 ],
