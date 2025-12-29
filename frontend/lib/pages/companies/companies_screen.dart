@@ -5,9 +5,11 @@ library;
 import 'package:flutter/material.dart';
 import 'dart:ui' as ui;
 import '../../services/company_service.dart';
+import '../../services/brand_service.dart';
 import '../../config/app_config.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:fluttertoast/fluttertoast.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 class CompaniesScreen extends StatefulWidget {
   const CompaniesScreen({super.key});
@@ -16,15 +18,27 @@ class CompaniesScreen extends StatefulWidget {
   State<CompaniesScreen> createState() => _CompaniesScreenState();
 }
 
-class _CompaniesScreenState extends State<CompaniesScreen> {
+class _CompaniesScreenState extends State<CompaniesScreen> with SingleTickerProviderStateMixin {
   final CompanyService _companyService = CompanyService();
+  final BrandService _brandService = BrandService();
   List<CompanyModel> _companies = [];
+  List<BrandModel> _brands = [];
   bool _isLoading = false;
+  bool _isLoadingBrands = false;
+  late TabController _tabController;
 
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 2, vsync: this);
     _loadCompanies();
+    _loadBrands();
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadCompanies() async {
@@ -36,6 +50,18 @@ class _CompaniesScreenState extends State<CompaniesScreen> {
     setState(() {
       _companies = companies;
       _isLoading = false;
+    });
+  }
+
+  Future<void> _loadBrands({bool forceRefresh = false}) async {
+    setState(() {
+      _isLoadingBrands = true;
+    });
+
+    final brands = await _brandService.fetchBrands(forceRefresh: forceRefresh);
+    setState(() {
+      _brands = brands;
+      _isLoadingBrands = false;
     });
   }
 
@@ -125,25 +151,79 @@ class _CompaniesScreenState extends State<CompaniesScreen> {
       textDirection: ui.TextDirection.rtl,
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('شرکت‌ها'),
+          title: const Text('شرکت‌ها و برندها'),
+          bottom: TabBar(
+            controller: _tabController,
+            tabs: const [
+              Tab(text: 'شرکت‌ها', icon: Icon(Icons.business)),
+              Tab(text: 'برندها', icon: Icon(Icons.label)),
+            ],
+          ),
           actions: [
-            IconButton(icon: const Icon(Icons.add), onPressed: _addCompany),
+            if (_tabController.index == 0)
+              IconButton(icon: const Icon(Icons.add), onPressed: _addCompany),
+            if (_tabController.index == 1)
+              IconButton(
+                icon: const Icon(Icons.refresh),
+                onPressed: () => _loadBrands(forceRefresh: true),
+                tooltip: 'به‌روزرسانی برندها',
+              ),
           ],
         ),
-        body: _isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : _companies.isEmpty
-            ? const Center(child: Text('شرکتی یافت نشد'))
-            : RefreshIndicator(
-                onRefresh: _loadCompanies,
-                child: ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: _companies.length,
-                  itemBuilder: (context, index) {
-                    return _buildCompanyCard(_companies[index]);
-                  },
-                ),
-              ),
+        body: TabBarView(
+          controller: _tabController,
+          children: [
+            // Companies Tab
+            _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _companies.isEmpty
+                    ? const Center(child: Text('شرکتی یافت نشد'))
+                    : RefreshIndicator(
+                        onRefresh: _loadCompanies,
+                        child: ListView.builder(
+                          padding: const EdgeInsets.all(16),
+                          itemCount: _companies.length,
+                          itemBuilder: (context, index) {
+                            return _buildCompanyCard(_companies[index]);
+                          },
+                        ),
+                      ),
+            // Brands Tab
+            _isLoadingBrands
+                ? const Center(child: CircularProgressIndicator())
+                : _brands.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Text('برندی یافت نشد'),
+                            const SizedBox(height: 16),
+                            ElevatedButton.icon(
+                              onPressed: () => _loadBrands(forceRefresh: true),
+                              icon: const Icon(Icons.refresh),
+                              label: const Text('بارگذاری مجدد'),
+                            ),
+                          ],
+                        ),
+                      )
+                    : RefreshIndicator(
+                        onRefresh: () => _loadBrands(forceRefresh: true),
+                        child: GridView.builder(
+                          padding: const EdgeInsets.all(16),
+                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 2,
+                            crossAxisSpacing: 16,
+                            mainAxisSpacing: 16,
+                            childAspectRatio: 0.8,
+                          ),
+                          itemCount: _brands.length,
+                          itemBuilder: (context, index) {
+                            return _buildBrandCard(_brands[index]);
+                          },
+                        ),
+                      ),
+          ],
+        ),
       ),
     );
   }
@@ -187,6 +267,72 @@ class _CompaniesScreenState extends State<CompaniesScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildBrandCard(BrandModel brand) {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Brand Image
+          Expanded(
+            flex: 3,
+            child: ClipRRect(
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+              child: brand.thumbnailUrl != null
+                  ? CachedNetworkImage(
+                      imageUrl: brand.thumbnailUrl!,
+                      fit: BoxFit.cover,
+                      placeholder: (context, url) => Container(
+                        color: Colors.grey[200],
+                        child: const Center(
+                          child: CircularProgressIndicator(),
+                        ),
+                      ),
+                      errorWidget: (context, url, error) => Container(
+                        color: Colors.grey[300],
+                        child: const Icon(
+                          Icons.broken_image,
+                          size: 48,
+                          color: Colors.grey,
+                        ),
+                      ),
+                    )
+                  : Container(
+                      color: Colors.grey[200],
+                      child: const Icon(
+                        Icons.label_outline,
+                        size: 48,
+                        color: Colors.grey,
+                      ),
+                    ),
+            ),
+          ),
+          // Brand Name
+          Expanded(
+            flex: 1,
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              alignment: Alignment.center,
+              child: Text(
+                brand.name,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

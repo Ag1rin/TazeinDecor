@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../providers/invoice_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../models/order_model.dart';
+import '../../models/product_model.dart';
 import '../../utils/persian_date.dart';
 import '../../utils/app_colors.dart';
 import '../../utils/status_labels.dart';
@@ -1008,6 +1009,56 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
       final companies = await _companyService.getCompanies();
       final companyMap = {for (var c in companies) c.name: c};
 
+      // Load product details for all items before generating PDFs
+      print('🔄 Loading product details for ${brandItems.values.expand((items) => items).length} items...');
+      final allItems = brandItems.values.expand((items) => items).toList();
+      final productLoadFutures = <Future>[];
+      
+      for (final item in allItems) {
+        // Get wooId from item or order
+        int? wooId = item.product?.wooId;
+        if (wooId == null) {
+          // Try to find in orders
+          for (final order in orders) {
+            final orderItem = order.items.firstWhere(
+              (oi) => oi.productId == item.productId,
+              orElse: () => item,
+            );
+            wooId = orderItem.product?.wooId;
+            if (wooId != null) break;
+          }
+        }
+        
+        if (wooId != null && !_productDetailsCache.containsKey(item.productId)) {
+          productLoadFutures.add(
+            _productService.getProductFromSecureAPI(wooId).then((data) {
+              if (data != null && mounted) {
+                setState(() {
+                  _productDetailsCache[item.productId] = data;
+                });
+                print('✅ Loaded product details for productId=${item.productId}, wooId=$wooId, name=${data['name']}');
+              }
+            }).catchError((e) {
+              print('⚠️ Error loading product ${item.productId}: $e');
+            }),
+          );
+        } else if (wooId == null) {
+          print('⚠️ No wooId found for productId=${item.productId}');
+        } else if (_productDetailsCache.containsKey(item.productId)) {
+          print('✅ Product details already cached for productId=${item.productId}');
+        }
+      }
+      
+      // Wait for all product details to load (with timeout)
+      if (productLoadFutures.isNotEmpty) {
+        await Future.wait(productLoadFutures, eagerError: false)
+            .timeout(const Duration(seconds: 30), onTimeout: () {
+          print('⚠️ Timeout loading some product details');
+          return <void>[];
+        });
+      }
+      print('✅ Product details loaded');
+
       // Generate PDF for each brand
       final List<Uint8List> pdfs = [];
       final List<String> brandNames = [];
@@ -1037,11 +1088,157 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
           company = companyMap[brandName];
         }
 
+        // Enrich items with product details from cache
+        final enrichedItems = items.map((item) {
+          final productDetails = _productDetailsCache[item.productId];
+          
+          // Try to get wooId from item, orders, or productDetails
+          int? wooId = item.product?.wooId;
+          if (wooId == null) {
+            for (final order in brandOrders[brandName] ?? []) {
+              final orderItem = order.items.firstWhere(
+                (oi) => oi.productId == item.productId,
+                orElse: () => item,
+              );
+              wooId = orderItem.product?.wooId;
+              if (wooId != null) break;
+            }
+          }
+          if (wooId == null && productDetails != null) {
+            wooId = productDetails['id'] as int? ?? productDetails['woo_id'] as int?;
+          }
+          
+          if (productDetails != null) {
+            // Create or update product from cache
+            ProductModel? updatedProduct;
+            
+            if (item.product != null) {
+              // Update existing product with details from cache
+              updatedProduct = ProductModel(
+                id: item.product!.id,
+                wooId: wooId ?? item.product!.wooId,
+                name: productDetails['name']?.toString() ?? item.product!.name,
+                slug: item.product!.slug,
+                sku: productDetails['sku']?.toString() ?? item.product!.sku,
+                description: item.product!.description,
+                shortDescription: item.product!.shortDescription,
+                price: item.product!.price,
+                regularPrice: item.product!.regularPrice,
+                salePrice: item.product!.salePrice,
+                stockQuantity: item.product!.stockQuantity,
+                status: item.product!.status,
+                packageArea: item.product!.packageArea,
+                designCode: productDetails['design_code']?.toString() ?? item.product!.designCode,
+                albumCode: productDetails['album_code']?.toString() ?? item.product!.albumCode,
+                rollCount: item.product!.rollCount,
+                imageUrl: item.product!.imageUrl,
+                images: item.product!.images,
+                categoryId: item.product!.categoryId,
+                companyId: item.product!.companyId,
+                localPrice: item.product!.localPrice,
+                localStock: item.product!.localStock,
+                brand: productDetails['brand']?.toString() ?? item.product!.brand,
+                attributes: productDetails['attributes'] != null && productDetails['attributes'] is List
+                    ? (productDetails['attributes'] as List)
+                        .map((attr) => ProductAttribute.fromJson(attr))
+                        .toList()
+                    : item.product!.attributes,
+                colleaguePrice: item.product!.colleaguePrice,
+                calculator: item.product!.calculator,
+              );
+            } else {
+              // Create new product from cache
+              updatedProduct = ProductModel(
+                id: item.productId,
+                wooId: wooId ?? item.productId,
+                name: productDetails['name']?.toString() ?? 'محصول',
+                slug: null,
+                sku: productDetails['sku']?.toString(),
+                description: null,
+                shortDescription: null,
+                price: (productDetails['price'] ?? 0).toDouble(),
+                regularPrice: productDetails['regular_price']?.toDouble(),
+                salePrice: productDetails['sale_price']?.toDouble(),
+                stockQuantity: productDetails['stock_quantity'] ?? 0,
+                status: productDetails['status'] ?? 'available',
+                packageArea: productDetails['package_area']?.toDouble(),
+                designCode: productDetails['design_code']?.toString(),
+                albumCode: productDetails['album_code']?.toString(),
+                rollCount: productDetails['roll_count'],
+                imageUrl: productDetails['image_url']?.toString(),
+                images: null,
+                categoryId: productDetails['category_id'],
+                companyId: productDetails['company_id'],
+                localPrice: null,
+                localStock: null,
+                brand: productDetails['brand']?.toString(),
+                attributes: productDetails['attributes'] != null && productDetails['attributes'] is List
+                    ? (productDetails['attributes'] as List)
+                        .map((attr) => ProductAttribute.fromJson(attr))
+                        .toList()
+                    : const [],
+                colleaguePrice: productDetails['colleague_price']?.toDouble(),
+                calculator: productDetails['calculator'] != null
+                    ? ProductCalculator.fromJson(productDetails['calculator'])
+                    : null,
+              );
+            }
+            
+            return OrderItemModel(
+              id: item.id,
+              productId: item.productId,
+              quantity: item.quantity,
+              unit: item.unit,
+              price: item.price,
+              total: item.total,
+              variationId: item.variationId,
+              variationPattern: item.variationPattern,
+              product: updatedProduct,
+              brand: item.brand ?? productDetails['brand']?.toString(),
+            );
+          }
+          
+          // If no product details, try to get product from orders
+          if (item.product == null) {
+            for (final order in brandOrders[brandName] ?? []) {
+              final orderItem = order.items.firstWhere(
+                (oi) => oi.id == item.id || 
+                       (oi.productId == item.productId && oi.quantity == item.quantity),
+                orElse: () => item,
+              );
+              if (orderItem.product != null) {
+                return OrderItemModel(
+                  id: item.id,
+                  productId: item.productId,
+                  quantity: item.quantity,
+                  unit: item.unit,
+                  price: item.price,
+                  total: item.total,
+                  variationId: item.variationId,
+                  variationPattern: item.variationPattern,
+                  product: orderItem.product,
+                  brand: item.brand ?? orderItem.brand,
+                );
+              }
+            }
+          }
+          
+          return item;
+        }).toList();
+
         // Generate PDF
         final brandOrdersList = brandOrders[brandName] ?? [];
+        
+        // Debug: Log enriched items to verify product details are loaded
+        print('📦 Generating PDF for brand: $brandName');
+        print('   - Items count: ${enrichedItems.length}');
+        for (final item in enrichedItems.take(3)) {
+          print('   - Item ${item.productId}: name=${item.product?.name ?? "N/A"}, albumCode=${item.product?.albumCode ?? "N/A"}, designCode=${item.product?.designCode ?? "N/A"}');
+        }
+        
         final pdfBytes = await AggregatedPdfService.generateBrandInvoicePdf(
           brandName: brandName,
-          items: items,
+          items: enrichedItems,
           orders: brandOrdersList,
           periodLabel: periodLabel,
           periodDate: startDateUtc,

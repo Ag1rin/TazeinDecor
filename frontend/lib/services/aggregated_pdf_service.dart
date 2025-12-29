@@ -7,8 +7,10 @@ import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import '../models/order_model.dart';
 import '../services/company_service.dart';
+import '../services/brand_service.dart';
 import '../utils/persian_number.dart';
 import '../utils/persian_date.dart';
+import '../utils/product_unit_display.dart';
 import '../config/app_config.dart';
 
 class AggregatedPdfService {
@@ -146,10 +148,22 @@ class AggregatedPdfService {
   }) async {
     await _loadFonts();
 
-    // Load logo
+    // Load company logo
     Uint8List? logoBytes;
     if (company?.logo != null) {
       logoBytes = await _loadLogoFromUrl(company!.logo);
+    }
+
+    // Try to load brand thumbnail from cache
+    Uint8List? brandLogoBytes;
+    try {
+      final brandService = BrandService();
+      final brand = await brandService.getBrandByName(brandName);
+      if (brand?.thumbnailUrl != null) {
+        brandLogoBytes = await _loadLogoFromUrl(brand!.thumbnailUrl);
+      }
+    } catch (e) {
+      print('⚠️ Error loading brand logo: $e');
     }
 
     // Calculate totals for brand-specific items
@@ -181,8 +195,8 @@ class AggregatedPdfService {
               child: pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
-                  // Header with brand name
-                  _buildSingleBrandHeader(brandName, company, logoBytes),
+                  // Header with brand name and logo
+                  _buildSingleBrandHeader(brandName, company, logoBytes, brandLogoBytes),
                   pw.SizedBox(height: 20),
 
                   // Invoice Info
@@ -230,23 +244,22 @@ class AggregatedPdfService {
   }) async {
     await _loadFonts();
 
-    // Load logo
+    // Load company logo
     Uint8List? logoBytes;
     if (company?.logo != null) {
       logoBytes = await _loadLogoFromUrl(company!.logo);
     }
 
-    // Calculate totals
-    double totalQuantity = 0;
-    double grandTotal = 0;
-    final Map<String, double> quantityByUnit = {};
-
-    for (final item in items) {
-      totalQuantity += item.quantity;
-      grandTotal += item.total;
-
-      final unit = item.unit;
-      quantityByUnit[unit] = (quantityByUnit[unit] ?? 0) + item.quantity;
+    // Try to load brand thumbnail from cache
+    Uint8List? brandLogoBytes;
+    try {
+      final brandService = BrandService();
+      final brand = await brandService.getBrandByName(brandName);
+      if (brand?.thumbnailUrl != null) {
+        brandLogoBytes = await _loadLogoFromUrl(brand!.thumbnailUrl);
+      }
+    } catch (e) {
+      print('⚠️ Error loading brand logo: $e');
     }
 
     // Format period date
@@ -268,7 +281,7 @@ class AggregatedPdfService {
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
                   // Header with logo and brand name
-                  _buildHeader(brandName, company, logoBytes),
+                  _buildHeader(brandName, company, logoBytes, brandLogoBytes),
                   pw.SizedBox(height: 20),
 
                   // Title
@@ -277,10 +290,6 @@ class AggregatedPdfService {
 
                   // Items table
                   _buildItemsTable(items, orders),
-                  pw.SizedBox(height: 20),
-
-                  // Totals
-                  _buildTotals(totalQuantity, quantityByUnit, grandTotal),
                   pw.SizedBox(height: 20),
 
                   // Footer
@@ -300,6 +309,7 @@ class AggregatedPdfService {
     String brandName,
     CompanyModel? company,
     Uint8List? logoBytes,
+    Uint8List? brandLogoBytes,
   ) {
     return pw.Row(
       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
@@ -330,22 +340,34 @@ class AggregatedPdfService {
             ],
           ),
         ),
-        // Logo (left side in RTL)
-        if (logoBytes != null)
-          pw.Container(
-            width: 80,
-            height: 80,
-            child: pw.Image(pw.MemoryImage(logoBytes), fit: pw.BoxFit.contain),
-          )
-        else
-          pw.Container(
-            width: 80,
-            height: 80,
-            decoration: pw.BoxDecoration(
-              border: pw.Border.all(color: PdfColors.grey300, width: 1),
-              borderRadius: pw.BorderRadius.circular(4),
-            ),
-          ),
+        // Logos (left side in RTL) - Brand logo takes priority, then company logo
+        pw.Row(
+          mainAxisSize: pw.MainAxisSize.min,
+          children: [
+            if (brandLogoBytes != null)
+              pw.Container(
+                width: 80,
+                height: 80,
+                margin: const pw.EdgeInsets.only(left: 8),
+                child: pw.Image(pw.MemoryImage(brandLogoBytes), fit: pw.BoxFit.contain),
+              )
+            else if (logoBytes != null)
+              pw.Container(
+                width: 80,
+                height: 80,
+                child: pw.Image(pw.MemoryImage(logoBytes), fit: pw.BoxFit.contain),
+              )
+            else
+              pw.Container(
+                width: 80,
+                height: 80,
+                decoration: pw.BoxDecoration(
+                  border: pw.Border.all(color: PdfColors.grey300, width: 1),
+                  borderRadius: pw.BorderRadius.circular(4),
+                ),
+              ),
+          ],
+        ),
       ],
     );
   }
@@ -363,7 +385,7 @@ class AggregatedPdfService {
         borderRadius: pw.BorderRadius.circular(4),
       ),
       child: pw.Text(
-        'درخواست موجودی و سفارش کالا از $brandName - دوره: $periodLabel - $periodDate',
+        'درخواست موجودی و سفارش کالا از $brandName - تاریخ: $periodDate',
         style: pw.TextStyle(
           font: _vazirBold,
           fontSize: 16,
@@ -375,55 +397,90 @@ class AggregatedPdfService {
     );
   }
 
+  /// Extract album name from product name or attributes
+  static String? _extractAlbumName(OrderItemModel item) {
+    // First try albumCode from product
+    if (item.product?.albumCode != null && item.product!.albumCode!.isNotEmpty) {
+      return item.product!.albumCode;
+    }
+    
+    // Try to find album code in attributes
+    if (item.product?.attributes != null) {
+      for (final attr in item.product!.attributes) {
+        final attrName = attr.name.toLowerCase();
+        if (attrName.contains('آلبوم') || 
+            attrName.contains('album') || 
+            attrName.contains('album_code')) {
+          return attr.value;
+        }
+      }
+    }
+    
+    // Try to extract from product name (if it contains album info)
+    final productName = item.product?.name ?? '';
+    // Look for patterns like "آلبوم X" or "Album X" in the name
+    final albumMatch = RegExp(r'(آلبوم|Album)[\s:]+([^\s]+)', caseSensitive: false)
+        .firstMatch(productName);
+    if (albumMatch != null) {
+      return albumMatch.group(2);
+    }
+    
+    return null;
+  }
+
+  /// Extract design code or feature code from product
+  static String? _extractDesignCode(OrderItemModel item) {
+    // First try designCode from product
+    if (item.product?.designCode != null && item.product!.designCode!.isNotEmpty) {
+      return item.product!.designCode;
+    }
+    
+    // Try to find design code or feature code in attributes
+    if (item.product?.attributes != null) {
+      for (final attr in item.product!.attributes) {
+        final attrName = attr.name.toLowerCase();
+        if (attrName.contains('کد طرح') || 
+            attrName.contains('کد طراحی') ||
+            attrName.contains('design') || 
+            attrName.contains('design_code') ||
+            attrName.contains('کد ویژگی') ||
+            attrName.contains('feature_code')) {
+          return attr.value;
+        }
+      }
+    }
+    
+    return null;
+  }
+
   static pw.Widget _buildItemsTable(
     List<OrderItemModel> items,
     List<OrderModel> orders,
   ) {
-    // Map item to order number - match by item ID or product ID + quantity
-    final itemOrderMap = <int, String>{};
-    for (final order in orders) {
-      for (final orderItem in order.items) {
-        // Find matching item in our items list
-        final matchingItem = items.firstWhere(
-          (i) =>
-              i.id == orderItem.id ||
-              (i.productId == orderItem.productId &&
-                  i.quantity == orderItem.quantity &&
-                  i.price == orderItem.price),
-          orElse: () => items.first, // Fallback
-        );
-
-        if (items.contains(matchingItem)) {
-          itemOrderMap[matchingItem.id] = order.orderNumber;
-        }
-      }
+    // Debug: Log items to verify product details
+    print('📋 Building items table with ${items.length} items');
+    for (final item in items.take(3)) {
+      print('   - Item ${item.productId}: product=${item.product != null}, name=${item.product?.name ?? "N/A"}, albumCode=${item.product?.albumCode ?? "N/A"}, designCode=${item.product?.designCode ?? "N/A"}, attributes=${item.product?.attributes.length ?? 0}');
     }
-
-    // For items not matched, use first order's number as fallback
-    final fallbackOrderNumber = orders.isNotEmpty
-        ? orders.first.orderNumber
-        : 'N/A';
-
+    
     return pw.Table(
       border: pw.TableBorder.all(color: PdfColors.grey400, width: 1),
       columnWidths: {
         0: const pw.FlexColumnWidth(0.5), // ردیف
-        1: const pw.FlexColumnWidth(2.5), // نام محصول
-        2: const pw.FlexColumnWidth(1.0), // تعداد
-        3: const pw.FlexColumnWidth(1.2), // قیمت واحد
-        4: const pw.FlexColumnWidth(1.2), // مبلغ کل
-        5: const pw.FlexColumnWidth(1.0), // شماره سفارش
+        1: const pw.FlexColumnWidth(2.5), // نام کالا
+        2: const pw.FlexColumnWidth(1.5), // نام آلبوم
+        3: const pw.FlexColumnWidth(1.5), // کد طرح/ویژگی
+        4: const pw.FlexColumnWidth(1.0), // تعداد
       },
       children: [
         // Header row
         pw.TableRow(
           decoration: const pw.BoxDecoration(color: PdfColors.grey200),
           children: [
-            _buildTableCell('شماره سفارش', isHeader: true),
-            _buildTableCell('مبلغ کل', isHeader: true),
-            _buildTableCell('قیمت واحد', isHeader: true),
             _buildTableCell('تعداد', isHeader: true),
-            _buildTableCell('نام محصول', isHeader: true),
+            _buildTableCell('کد طرح', isHeader: true),
+            _buildTableCell('نام آلبوم', isHeader: true),
+            _buildTableCell('نام کالا', isHeader: true),
             _buildTableCell('ردیف', isHeader: true),
           ],
         ),
@@ -431,18 +488,109 @@ class AggregatedPdfService {
         ...items.asMap().entries.map((entry) {
           final index = entry.key;
           final item = entry.value;
-          final orderNumber = itemOrderMap[item.id] ?? fallbackOrderNumber;
+          
+          // Extract product name from item.product or order
+          String productName = item.product?.name ?? 'محصول';
+          if (productName == 'محصول' || productName.isEmpty) {
+            // Try to find in orders
+            for (final order in orders) {
+              final orderItem = order.items.firstWhere(
+                (oi) => oi.id == item.id || 
+                       (oi.productId == item.productId && oi.quantity == item.quantity),
+                orElse: () => item,
+              );
+              if (orderItem.product?.name != null && orderItem.product!.name.isNotEmpty) {
+                productName = orderItem.product!.name;
+                break;
+              }
+            }
+          }
+          
+          // Extract album name
+          String albumName = _extractAlbumName(item) ?? '-';
+          if (albumName == '-') {
+            // Try to find in orders
+            for (final order in orders) {
+              final orderItem = order.items.firstWhere(
+                (oi) => oi.id == item.id || 
+                       (oi.productId == item.productId && oi.quantity == item.quantity),
+                orElse: () => item,
+              );
+              final extracted = _extractAlbumName(orderItem);
+              if (extracted != null && extracted.isNotEmpty) {
+                albumName = extracted;
+                break;
+              }
+            }
+          }
+          
+          // Extract design/feature code
+          String designCode = _extractDesignCode(item) ?? '-';
+          if (designCode == '-') {
+            // Try to find in orders
+            for (final order in orders) {
+              final orderItem = order.items.firstWhere(
+                (oi) => oi.id == item.id || 
+                       (oi.productId == item.productId && oi.quantity == item.quantity),
+                orElse: () => item,
+              );
+              final extracted = _extractDesignCode(orderItem);
+              if (extracted != null && extracted.isNotEmpty) {
+                designCode = extracted;
+                break;
+              }
+            }
+          }
+          
+          // Get quantity with unit
+          final quantity = item.quantity;
+          
+          // Get unit from order item, or from product calculator, or from product details
+          String unit = item.unit;
+          if (unit.isEmpty || unit == 'package') {
+            // Try to get from product calculator
+            if (item.product?.calculator != null) {
+              final calc = item.product!.calculator!;
+              final calcUnit = ProductUnitDisplay.getUnitFromCalculator(calc);
+              if (calcUnit != null && calcUnit.isNotEmpty) {
+                unit = calcUnit;
+              }
+            }
+            // If still empty, try from product details cache (if available in orders)
+            if (unit.isEmpty || unit == 'package') {
+              for (final order in orders) {
+                final orderItem = order.items.firstWhere(
+                  (oi) => oi.id == item.id || 
+                         (oi.productId == item.productId && oi.quantity == item.quantity),
+                  orElse: () => item,
+                );
+                if (orderItem.product?.calculator != null) {
+                  final calc = orderItem.product!.calculator!;
+                  final calcUnit = ProductUnitDisplay.getUnitFromCalculator(calc);
+                  if (calcUnit != null && calcUnit.isNotEmpty) {
+                    unit = calcUnit;
+                    break;
+                  }
+                }
+              }
+            }
+            // Default fallback
+            if (unit.isEmpty) {
+              unit = 'package';
+            }
+          }
+          
+          // Convert unit to Persian using ProductUnitDisplay
+          final unitPersian = ProductUnitDisplay.getDisplayUnit(unit);
+          final quantityText = '${PersianNumber.formatNumber(quantity.toInt())} $unitPersian';
 
           return pw.TableRow(
             decoration: const pw.BoxDecoration(color: PdfColors.white),
             children: [
-              _buildTableCell(PersianNumber.toPersian(orderNumber)),
-              _buildTableCell(PersianNumber.formatPrice(item.total)),
-              _buildTableCell(PersianNumber.formatPrice(item.price)),
-              _buildTableCell(
-                '${PersianNumber.formatNumber(item.quantity.toInt())} ${item.unit}',
-              ),
-              _buildTableCell(item.product?.name ?? 'محصول'),
+              _buildTableCell(quantityText),
+              _buildTableCell(designCode),
+              _buildTableCell(albumName),
+              _buildTableCell(productName),
               _buildTableCell(PersianNumber.formatNumber((index + 1).toInt())),
             ],
           );
@@ -467,66 +615,6 @@ class AggregatedPdfService {
     );
   }
 
-  static pw.Widget _buildTotals(
-    double totalQuantity,
-    Map<String, double> quantityByUnit,
-    double grandTotal,
-  ) {
-    return pw.Container(
-      padding: const pw.EdgeInsets.all(12),
-      decoration: pw.BoxDecoration(
-        border: pw.Border.all(color: PdfColors.grey400, width: 1),
-        borderRadius: pw.BorderRadius.circular(4),
-      ),
-      child: pw.Column(
-        crossAxisAlignment: pw.CrossAxisAlignment.end,
-        children: [
-          // Quantity by unit
-          for (final entry in quantityByUnit.entries)
-            pw.Padding(
-              padding: const pw.EdgeInsets.symmetric(vertical: 4),
-              child: pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text(
-                    '${PersianNumber.formatNumber(entry.value.toInt())} ${entry.key}',
-                    style: pw.TextStyle(font: _vazirRegular, fontSize: 11),
-                    textDirection: pw.TextDirection.rtl,
-                  ),
-                  pw.Text(
-                    'تعداد کل (${entry.key}):',
-                    style: pw.TextStyle(font: _vazirBold, fontSize: 11),
-                    textDirection: pw.TextDirection.rtl,
-                  ),
-                ],
-              ),
-            ),
-          pw.Divider(color: PdfColors.black, thickness: 2),
-          pw.SizedBox(height: 4),
-          // Grand total
-          pw.Row(
-            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-            children: [
-              pw.Text(
-                '${PersianNumber.formatPrice(grandTotal)} تومان',
-                style: pw.TextStyle(
-                  font: _vazirBold,
-                  fontSize: 16,
-                  color: PdfColors.blue700,
-                ),
-                textDirection: pw.TextDirection.rtl,
-              ),
-              pw.Text(
-                'مبلغ کل:',
-                style: pw.TextStyle(font: _vazirBold, fontSize: 14),
-                textDirection: pw.TextDirection.rtl,
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
 
   /// Build total row helper
   static pw.Widget _buildTotalRow(
@@ -583,16 +671,6 @@ class AggregatedPdfService {
               font: _vazirRegular,
               fontSize: 10,
               color: PdfColors.grey700,
-            ),
-            textDirection: pw.TextDirection.rtl,
-          ),
-          pw.SizedBox(height: 4),
-          pw.Text(
-            'با تشکر از خرید شما',
-            style: pw.TextStyle(
-              font: _vazirBold,
-              fontSize: 12,
-              color: PdfColors.blue700,
             ),
             textDirection: pw.TextDirection.rtl,
           ),
@@ -663,6 +741,7 @@ class AggregatedPdfService {
     String brandName,
     CompanyModel? company,
     Uint8List? logoBytes,
+    Uint8List? brandLogoBytes,
   ) {
     return pw.Row(
       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
@@ -695,22 +774,34 @@ class AggregatedPdfService {
             ],
           ),
         ),
-        // Logo (left side in RTL)
-        if (logoBytes != null)
-          pw.Container(
-            width: 80,
-            height: 80,
-            child: pw.Image(pw.MemoryImage(logoBytes), fit: pw.BoxFit.contain),
-          )
-        else
-          pw.Container(
-            width: 80,
-            height: 80,
-            decoration: pw.BoxDecoration(
-              border: pw.Border.all(color: PdfColors.grey300, width: 1),
-              borderRadius: pw.BorderRadius.circular(4),
-            ),
-          ),
+        // Logos (left side in RTL) - Brand logo takes priority, then company logo
+        pw.Row(
+          mainAxisSize: pw.MainAxisSize.min,
+          children: [
+            if (brandLogoBytes != null)
+              pw.Container(
+                width: 80,
+                height: 80,
+                margin: const pw.EdgeInsets.only(left: 8),
+                child: pw.Image(pw.MemoryImage(brandLogoBytes), fit: pw.BoxFit.contain),
+              )
+            else if (logoBytes != null)
+              pw.Container(
+                width: 80,
+                height: 80,
+                child: pw.Image(pw.MemoryImage(logoBytes), fit: pw.BoxFit.contain),
+              )
+            else
+              pw.Container(
+                width: 80,
+                height: 80,
+                decoration: pw.BoxDecoration(
+                  border: pw.Border.all(color: PdfColors.grey300, width: 1),
+                  borderRadius: pw.BorderRadius.circular(4),
+                ),
+              ),
+          ],
+        ),
       ],
     );
   }
@@ -967,16 +1058,6 @@ class AggregatedPdfService {
               font: _vazirRegular,
               fontSize: 10,
               color: PdfColors.grey700,
-            ),
-            textDirection: pw.TextDirection.rtl,
-          ),
-          pw.SizedBox(height: 4),
-          pw.Text(
-            'با تشکر از خرید شما',
-            style: pw.TextStyle(
-              font: _vazirBold,
-              fontSize: 12,
-              color: PdfColors.blue700,
             ),
             textDirection: pw.TextDirection.rtl,
           ),

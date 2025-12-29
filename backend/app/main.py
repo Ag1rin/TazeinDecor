@@ -28,7 +28,7 @@ import traceback
 import logging
 from app.config import settings
 from app.database import init_db
-from app.routers import auth, users, products, orders, chat, companies, returns, installations, reports, discounts
+from app.routers import auth, users, products, orders, chat, companies, returns, installations, reports, discounts, brands
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -442,6 +442,7 @@ app.include_router(companies.router)
 app.include_router(returns.router)
 app.include_router(installations.router)
 app.include_router(reports.router)
+app.include_router(brands.router)
 
 
 @app.get("/")
