@@ -26,14 +26,23 @@ is_production = os.getenv("ENVIRONMENT", "development").lower() == "production"
 
 if __name__ == "__main__":
     # Get port from environment variable (required by Heroku/Liara, optional for VPS)
-    # Default to 8000 for local/VPS development, or use PORT env var
-    # Also check settings.PORT as fallback
+    # Liara uses port 80 by default if PORT is not set
+    # Default to 80 for Liara/production, 8000 for local development
     from app.config import settings
     port_env = os.getenv("PORT")
-    if port_env:
-        port = int(port_env)
+    if port_env and port_env.strip():
+        try:
+            port = int(port_env.strip())
+        except (ValueError, TypeError):
+            # If PORT env var is invalid, use default from settings
+            port = settings.PORT
     else:
+        # No PORT env var set, use default from settings (80 for Liara)
         port = settings.PORT
+    
+    # Ensure port is always a valid integer
+    if not isinstance(port, int) or port <= 0:
+        port = 80  # Final fallback to port 80 for Liara
     
     # Production configuration
     if is_production:
