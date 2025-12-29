@@ -3,6 +3,12 @@ Production entry point for FastAPI application
 """
 import os
 
+# CRITICAL: Set PORT in environment FIRST, before any imports
+# This ensures uvicorn and its workers can access PORT
+# Liara uses port 80 by default
+if not os.getenv("PORT"):
+    os.environ["PORT"] = "80"
+
 # Temporary monkey patch for passlib+bcrypt compatibility.
 # Newer bcrypt releases (>=4.1) removed the __about__ attribute that
 # passlib 1.x expects. Add it back before anything imports passlib.
@@ -45,6 +51,10 @@ if __name__ == "__main__":
     # Ensure port is always a valid integer (final safety check)
     if not isinstance(port, int) or port <= 0:
         port = 80  # Final fallback to port 80 for Liara
+    
+    # CRITICAL: Set PORT in environment so uvicorn can access it
+    # This ensures uvicorn workers can also access the port
+    os.environ["PORT"] = str(port)
     
     # Print port for debugging (helps in deployment logs)
     print(f"🚀 Starting server on port {port} (ENVIRONMENT={os.getenv('ENVIRONMENT', 'development')})")
