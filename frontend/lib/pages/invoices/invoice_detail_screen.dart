@@ -489,7 +489,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
       textDirection: ui.TextDirection.rtl,
       child: Scaffold(
         appBar: AppBar(
-          title: Text('فاکتور ${invoice.effectiveInvoiceNumber}'),
+          title: Text(invoice.effectiveInvoiceNumberWithDate),
           actions: [
             IconButton(
               icon: (_isGeneratingPdf || _isLoadingBrands)
@@ -749,20 +749,12 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'شماره فاکتور: ${invoice.effectiveInvoiceNumber}',
+                        invoice.effectiveInvoiceNumberWithDate,
                         style: const TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      if (invoice.issueDate != null)
-                        Text(
-                          'تاریخ صدور: ${PersianDate.formatDate(invoice.issueDate!)}',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey[700],
-                          ),
-                        ),
                       if (invoice.dueDate != null)
                         Text(
                           'تاریخ سررسید: ${PersianDate.formatDate(invoice.dueDate!)}',

@@ -745,13 +745,8 @@ class AggregatedPdfService {
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             children: [
               pw.Text(
-                PersianNumber.toPersian(invoice.effectiveInvoiceNumber),
+                PersianNumber.toPersian(invoice.effectiveInvoiceNumberWithDate),
                 style: pw.TextStyle(font: _vazirRegular, fontSize: 11),
-                textDirection: pw.TextDirection.rtl,
-              ),
-              pw.Text(
-                'شماره فاکتور:',
-                style: pw.TextStyle(font: _vazirBold, fontSize: 11),
                 textDirection: pw.TextDirection.rtl,
               ),
             ],

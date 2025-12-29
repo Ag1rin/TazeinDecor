@@ -309,20 +309,12 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'فاکتور: ${invoice.effectiveInvoiceNumber}',
+                            invoice.effectiveInvoiceNumberWithDate,
                             style: const TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
-                          if (invoice.issueDate != null)
-                            Text(
-                              'تاریخ صدور: ${PersianDate.formatDate(invoice.issueDate!)}',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey[600],
-                              ),
-                            ),
                         ],
                       ),
                     ),

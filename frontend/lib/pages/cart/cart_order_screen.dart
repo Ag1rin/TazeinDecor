@@ -158,16 +158,82 @@ class _CartOrderScreenState extends State<CartOrderScreen> {
     }
 
     // Check if all products have cooperation price (colleaguePrice)
+    // First, try to get price from cache if product doesn't have colleaguePrice
     final itemsWithoutPrice = cartProvider.items.where((item) {
-      return item.product.displayPrice == null || item.product.displayPrice! <= 0;
+      // First check if product has colleaguePrice
+      if (item.product.displayPrice != null && item.product.displayPrice! > 0) {
+        return false;
+      }
+      
+      // If not, check cache
+      final cachedData = _productDetailsCache[item.product.id];
+      if (cachedData != null) {
+        final colleaguePrice = cachedData['colleague_price'];
+        if (colleaguePrice != null) {
+          final price = colleaguePrice is num ? colleaguePrice.toDouble() : 
+                       (colleaguePrice is String ? double.tryParse(colleaguePrice) : null);
+          if (price != null && price > 0) {
+            return false; // Price found in cache
+          }
+        }
+      }
+      
+      // No price found
+      return true;
     }).toList();
     
     if (itemsWithoutPrice.isNotEmpty) {
-      Fluttertoast.showToast(
-        msg: 'برخی محصولات قیمت همکاری ندارند. لطفا صفحه را رفرش کنید و دوباره تلاش کنید.',
-        toastLength: Toast.LENGTH_LONG,
-      );
-      return;
+      // Try to load missing prices before showing error
+      bool allLoaded = true;
+      for (final item in itemsWithoutPrice) {
+        if (!_productDetailsCache.containsKey(item.product.id) &&
+            _loadingProductDetails[item.product.id] != true) {
+          allLoaded = false;
+          break;
+        }
+      }
+      
+      if (!allLoaded) {
+        // Still loading, wait a bit and show message
+        Fluttertoast.showToast(
+          msg: 'در حال دریافت قیمت‌های همکاری... لطفا چند لحظه صبر کنید.',
+          toastLength: Toast.LENGTH_LONG,
+        );
+        // Wait for prices to load
+        await Future.delayed(const Duration(seconds: 2));
+        // Retry check
+        final retryItemsWithoutPrice = cartProvider.items.where((item) {
+          if (item.product.displayPrice != null && item.product.displayPrice! > 0) {
+            return false;
+          }
+          final cachedData = _productDetailsCache[item.product.id];
+          if (cachedData != null) {
+            final colleaguePrice = cachedData['colleague_price'];
+            if (colleaguePrice != null) {
+              final price = colleaguePrice is num ? colleaguePrice.toDouble() : 
+                           (colleaguePrice is String ? double.tryParse(colleaguePrice) : null);
+              if (price != null && price > 0) {
+                return false;
+              }
+            }
+          }
+          return true;
+        }).toList();
+        
+        if (retryItemsWithoutPrice.isNotEmpty) {
+          Fluttertoast.showToast(
+            msg: 'برخی محصولات قیمت همکاری ندارند. لطفا صفحه را رفرش کنید و دوباره تلاش کنید.',
+            toastLength: Toast.LENGTH_LONG,
+          );
+          return;
+        }
+      } else {
+        Fluttertoast.showToast(
+          msg: 'برخی محصولات قیمت همکاری ندارند. لطفا صفحه را رفرش کنید و دوباره تلاش کنید.',
+          toastLength: Toast.LENGTH_LONG,
+        );
+        return;
+      }
     }
 
     setState(() {
@@ -189,10 +255,25 @@ class _CartOrderScreenState extends State<CartOrderScreen> {
             : null,
         'items': cartProvider.items.map((item) {
           // Ensure we always send a valid cooperation price
-          final price = item.product.displayPrice;
+          // First try product.displayPrice, then check cache
+          double? price = item.product.displayPrice;
+          
+          if (price == null || price <= 0) {
+            // Try to get from cache
+            final cachedData = _productDetailsCache[item.product.id];
+            if (cachedData != null) {
+              final colleaguePrice = cachedData['colleague_price'];
+              if (colleaguePrice != null) {
+                price = colleaguePrice is num ? colleaguePrice.toDouble() : 
+                       (colleaguePrice is String ? double.tryParse(colleaguePrice) : null);
+              }
+            }
+          }
+          
           if (price == null || price <= 0) {
             throw Exception('قیمت همکاری برای محصول ${item.product.name} یافت نشد');
           }
+          
           return {
             // Use local DB product id (not WooCommerce id)
             'product_id': item.localProductId,

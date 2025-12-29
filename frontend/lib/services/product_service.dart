@@ -142,7 +142,7 @@ class ProductService {
     try {
       // Use backend API instead of direct API midia call to avoid CORS/ORB issues
       final response = await _api.get('/products/$productId/colleague-price');
-      
+
       if (response.statusCode == 200) {
         final data = response.data as Map<String, dynamic>;
         // Return the full data object for compatibility

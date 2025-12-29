@@ -1,5 +1,6 @@
 // Order model (also used as Invoice)
 import '../models/product_model.dart';
+import '../utils/persian_date.dart';
 
 /// Helper function to safely convert dynamic value to double
 /// Handles both num and String types
@@ -105,6 +106,14 @@ class OrderModel {
   // Get effective invoice number
   String get effectiveInvoiceNumber {
     return invoiceNumber ?? orderNumber;
+  }
+
+  // Get invoice number with date format: "فاکتور X در تاریخ Y"
+  String get effectiveInvoiceNumberWithDate {
+    final invNumber = effectiveInvoiceNumber;
+    final date = issueDate ?? createdAt;
+    final dateStr = PersianDate.formatDate(date);
+    return 'فاکتور $invNumber در تاریخ $dateStr';
   }
 
   // Calculate grand total

@@ -202,7 +202,7 @@ class _InvoiceEditScreenState extends State<InvoiceEditScreen> {
       textDirection: ui.TextDirection.rtl,
       child: Scaffold(
         appBar: AppBar(
-          title: Text('ویرایش فاکتور ${widget.invoice.effectiveInvoiceNumber}'),
+          title: Text('ویرایش ${widget.invoice.effectiveInvoiceNumberWithDate}'),
         ),
         body: SingleChildScrollView(
           padding: const EdgeInsets.all(16),
