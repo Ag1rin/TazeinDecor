@@ -25,9 +25,15 @@ app = fastapi_app
 is_production = os.getenv("ENVIRONMENT", "development").lower() == "production"
 
 if __name__ == "__main__":
-    # Get port from environment variable (required by Heroku, optional for VPS)
+    # Get port from environment variable (required by Heroku/Liara, optional for VPS)
     # Default to 8000 for local/VPS development, or use PORT env var
-    port = int(os.getenv("PORT", "80"))
+    # Also check settings.PORT as fallback
+    from app.config import settings
+    port_env = os.getenv("PORT")
+    if port_env:
+        port = int(port_env)
+    else:
+        port = settings.PORT
     
     # Production configuration
     if is_production:
