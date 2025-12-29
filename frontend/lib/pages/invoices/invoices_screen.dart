@@ -844,37 +844,23 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
     );
   }
 
-  /// NEW: Show date filter dialog (Today/Yesterday)
+  /// NEW: Show date picker dialog for PDF generation
   Future<void> _showDateFilterDialog() async {
-    final selected = await showDialog<String>(
+    final now = JalaliDate.now();
+    final selectedDate = await showJalaliDatePicker(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('انتخاب دوره'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.today),
-              title: const Text('امروز'),
-              onTap: () => Navigator.pop(context, 'today'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.history),
-              title: const Text('دیروز'),
-              onTap: () => Navigator.pop(context, 'yesterday'),
-            ),
-          ],
-        ),
-      ),
+      initialDate: now,
+      firstDate: JalaliDate(1400, 1, 1),
+      lastDate: now,
     );
 
-    if (selected != null && mounted) {
-      await _generateAggregatedPdfs(selected);
+    if (selectedDate != null && mounted) {
+      await _generateAggregatedPdfsForDate(selectedDate);
     }
   }
 
-  /// NEW: Generate aggregated PDFs for selected date period
-  Future<void> _generateAggregatedPdfs(String period) async {
+  /// NEW: Generate aggregated PDFs for selected date
+  Future<void> _generateAggregatedPdfsForDate(JalaliDate selectedDate) async {
     if (_isGeneratingPdfs) return; // Prevent multiple simultaneous generations
 
     setState(() {
@@ -882,64 +868,98 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
     });
 
     try {
-      // Calculate date range
-      // Use UTC to match backend expectations
-      final now = DateTime.now().toUtc();
-      final today = DateTime.utc(now.year, now.month, now.day);
-      DateTime startDate, endDate;
-      String periodLabel;
-
-      if (period == 'today') {
-        // Today: from 00:00:00 UTC to 23:59:59.999 UTC
-        startDate = today;
-        endDate = DateTime.utc(
-          today.year,
-          today.month,
-          today.day,
-          23,
-          59,
-          59,
-          999, // Include milliseconds
-        );
-        periodLabel = 'امروز';
-      } else {
-        // Yesterday: 00:00:00 UTC to 23:59:59.999 UTC
-        startDate = today.subtract(const Duration(days: 1));
-        endDate = DateTime.utc(
-          startDate.year,
-          startDate.month,
-          startDate.day,
-          23,
-          59,
-          59,
-          999, // Include milliseconds
-        );
-        periodLabel = 'دیروز';
-      }
+      // Convert Jalali date to DateTime (local timezone - Tehran)
+      final selectedDateTime = selectedDate.toDateTime();
+      
+      // Calculate date range for the selected date: from 00:00:00 to 23:59:59.999 in local time
+      // Tehran is UTC+3:30, so we need to account for this offset
+      final startLocal = DateTime(
+        selectedDateTime.year,
+        selectedDateTime.month,
+        selectedDateTime.day,
+        0,
+        0,
+        0,
+        0,
+      );
+      final endLocal = DateTime(
+        selectedDateTime.year,
+        selectedDateTime.month,
+        selectedDateTime.day,
+        23,
+        59,
+        59,
+        999,
+      );
+      
+      // Convert to UTC for backend
+      // IMPORTANT: We need to treat startLocal and endLocal as Tehran time (UTC+3:30)
+      // So we manually subtract Tehran offset (3:30) to get UTC
+      const tehranOffset = Duration(hours: 3, minutes: 30);
+      final startDateUtc = startLocal.subtract(tehranOffset);
+      final endDateUtc = endLocal.subtract(tehranOffset);
+      final periodLabel = selectedDate.formatPersian();
 
       // Debug logging
-      print('🔍 Date range for $periodLabel:');
-      print('   - Local time now: ${DateTime.now()}');
-      print('   - UTC time now: ${now}');
-      print('   - startDate (UTC): ${startDate.toIso8601String()}');
-      print('   - endDate (UTC): ${endDate.toIso8601String()}');
+      print('🔍 Date range for selected date:');
+      print('   - Selected Jalali date: ${selectedDate.formatPersian()}');
+      print('   - Selected DateTime (local): $selectedDateTime');
+      print('   - Start (local Tehran): $startLocal');
+      print('   - End (local Tehran): $endLocal');
+      print('   - Tehran offset: $tehranOffset');
+      print('   - Start (UTC): ${startDateUtc.toIso8601String()}');
+      print('   - End (UTC): ${endDateUtc.toIso8601String()}');
+      
+      // Also log current time for debugging
+      print('   - Current time (local): ${DateTime.now()}');
+      print('   - Current time (UTC): ${DateTime.now().toUtc()}');
+      
+      // Also log some sample orders to see their created_at
+      print('   - Will search for orders between:');
+      print('     ${startDateUtc.toIso8601String()} and ${endDateUtc.toIso8601String()}');
 
-      // Fetch orders in date range
+      // Format dates as ISO 8601 strings with UTC timezone indicator
+      // Add 'Z' to indicate UTC timezone
+      final startDateStr = '${startDateUtc.toIso8601String()}Z';
+      final endDateStr = '${endDateUtc.toIso8601String()}Z';
+      
       print('🔍 Fetching orders with date range:');
-      print('   - startDate: ${startDate.toIso8601String()}');
-      print('   - endDate: ${endDate.toIso8601String()}');
+      print('   - startDate: $startDateStr');
+      print('   - endDate: $endDateStr');
 
       final orders = await _orderService.searchInvoices(
-        startDate: startDate.toIso8601String(),
-        endDate: endDate.toIso8601String(),
+        startDate: startDateStr,
+        endDate: endDateStr,
         perPage: 1000, // Get all orders
       );
 
       print('🔍 Found ${orders.length} orders in date range');
       if (orders.isNotEmpty) {
-        print(
-          '   - First order: ID=${orders.first.id}, created_at=${orders.first.createdAt}',
-        );
+        print('   - First order: ID=${orders.first.id}');
+        print('   - First order created_at: ${orders.first.createdAt}');
+        print('   - First order created_at (local): ${orders.first.createdAt.toLocal()}');
+        print('   - First order created_at (UTC): ${orders.first.createdAt.toUtc()}');
+        if (orders.length > 1) {
+          print('   - Last order: ID=${orders.last.id}');
+          print('   - Last order created_at: ${orders.last.createdAt}');
+        }
+      } else {
+        print('   ⚠️ No orders found!');
+        print('   - Checking if there are any orders at all...');
+        // Try to get all orders without date filter to see what we have
+        try {
+          final allOrders = await _orderService.getOrders(perPage: 10);
+          print('   - Total orders available (via getOrders): ${allOrders.length}');
+          if (allOrders.isNotEmpty) {
+            print('   - Sample order created_at: ${allOrders.first.createdAt}');
+            print('   - Sample order created_at (local): ${allOrders.first.createdAt.toLocal()}');
+            print('   - Sample order created_at (UTC): ${allOrders.first.createdAt.toUtc()}');
+            print('   - Sample order ID: ${allOrders.first.id}');
+            print('   - Sample order number: ${allOrders.first.orderNumber}');
+          }
+        } catch (e) {
+          print('   - Error getting orders: $e');
+        }
       }
 
       if (orders.isEmpty) {
@@ -1024,7 +1044,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
           items: items,
           orders: brandOrdersList,
           periodLabel: periodLabel,
-          periodDate: period == 'today' ? today : startDate,
+          periodDate: startDateUtc,
           company: company,
         );
 

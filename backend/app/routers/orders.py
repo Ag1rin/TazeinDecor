@@ -919,6 +919,198 @@ async def get_orders(
     return responses
 
 
+@router.get("/search", response_model=List[OrderResponse])
+async def search_invoices(
+    q: Optional[str] = Query(None, description="Search query (invoice number, customer name, etc.)"),
+    status: Optional[str] = Query(None, description="Filter by order status (case-insensitive)"),
+    start_date: Optional[str] = Query(None, description="Start date (ISO format, accepts various formats)"),
+    end_date: Optional[str] = Query(None, description="End date (ISO format, accepts various formats)"),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(20, ge=1, le=1000),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Search invoices by number, date, customer, or status"""
+    try:
+        query = db.query(Order)
+        
+        # Filter by role
+        if current_user.role == UserRole.SELLER:
+            query = query.filter(Order.seller_id == current_user.id)
+        elif current_user.role == UserRole.STORE_MANAGER:
+            # Store Manager sees only orders from sellers they created
+            seller_ids = _get_manager_seller_ids(db, current_user.id)
+            if seller_ids:
+                query = query.filter(Order.seller_id.in_(seller_ids))
+            else:
+                # If manager has no sellers, return empty result
+                query = query.filter(Order.id == -1)  # Impossible condition
+        
+        # Search by query string
+        if q:
+            query = query.filter(
+                (Order.order_number.ilike(f"%{q}%")) |
+                (Order.invoice_number.ilike(f"%{q}%")) |
+                (Order.notes.ilike(f"%{q}%"))
+            )
+        
+        # Filter by status
+        if status:
+            # Convert to lowercase string for comparison (status column is String(50))
+            status_lower = str(status).lower()
+            query = query.filter(Order.status == status_lower)
+        
+        # Eager load customer relationship to avoid N+1 queries
+        query = query.options(joinedload(Order.customer))
+        
+        # Filter by date range
+        # FIXED: Flexible datetime parsing for search to prevent 422 errors
+        # Handles ISO strings with milliseconds, timezones, and various formats
+        if start_date:
+            start = None
+            try:
+                # Handle dates with microseconds but no timezone (e.g., 2025-12-23T00:00:00.000)
+                date_str = start_date.strip()
+                
+                # If it has microseconds but no timezone, strip microseconds first
+                if '.' in date_str and '+' not in date_str and 'Z' not in date_str:
+                    # Split by '.' and take first part (date + time without microseconds)
+                    date_str = date_str.split('.')[0]
+                
+                # Replace Z with +00:00 for timezone
+                if 'Z' in date_str:
+                    date_str = date_str.replace('Z', '+00:00')
+                
+                # Try parsing with fromisoformat
+                try:
+                    start = datetime.fromisoformat(date_str)
+                except ValueError:
+                    # Fallback: Try with strptime
+                    from datetime import timezone
+                    # Try common formats
+                    for fmt in ['%Y-%m-%dT%H:%M:%S', '%Y-%m-%dT%H:%M:%S.%f', '%Y-%m-%d %H:%M:%S', '%Y-%m-%d']:
+                        try:
+                            start = datetime.strptime(date_str.split('+')[0].split('Z')[0], fmt)
+                            break
+                        except ValueError:
+                            continue
+                    if start is None:
+                        raise ValueError("Could not parse date")
+            except (ValueError, AttributeError) as e:
+                # If all parsing fails, log and skip this filter (don't fail the request)
+                print(f"⚠️  Could not parse start_date '{start_date}': {e}. Skipping date filter.")
+                start = None
+            
+            if start:
+                # If naive datetime, make it timezone-aware (assume UTC)
+                if start.tzinfo is None:
+                    from datetime import timezone
+                    start = start.replace(tzinfo=timezone.utc)
+                query = query.filter(Order.created_at >= start)
+        
+        if end_date:
+            end = None
+            try:
+                # Handle dates with microseconds but no timezone (e.g., 2025-12-23T14:04:45.917765)
+                date_str = end_date.strip()
+                
+                # If it has microseconds but no timezone, strip microseconds first
+                if '.' in date_str and '+' not in date_str and 'Z' not in date_str:
+                    # Split by '.' and take first part (date + time without microseconds)
+                    date_str = date_str.split('.')[0]
+                
+                # Replace Z with +00:00 for timezone
+                if 'Z' in date_str:
+                    date_str = date_str.replace('Z', '+00:00')
+                
+                # Try parsing with fromisoformat
+                try:
+                    end = datetime.fromisoformat(date_str)
+                except ValueError:
+                    # Fallback: Try with strptime
+                    from datetime import timezone
+                    # Try common formats
+                    for fmt in ['%Y-%m-%dT%H:%M:%S', '%Y-%m-%dT%H:%M:%S.%f', '%Y-%m-%d %H:%M:%S', '%Y-%m-%d']:
+                        try:
+                            end = datetime.strptime(date_str.split('+')[0].split('Z')[0], fmt)
+                            break
+                        except ValueError:
+                            continue
+                    if end is None:
+                        raise ValueError("Could not parse date")
+            except (ValueError, AttributeError) as e:
+                # If all parsing fails, log and skip this filter (don't fail the request)
+                print(f"⚠️  Could not parse end_date '{end_date}': {e}. Skipping date filter.")
+                end = None
+            
+            if end:
+                # If naive datetime, make it timezone-aware (assume UTC)
+                if end.tzinfo is None:
+                    from datetime import timezone
+                    end = end.replace(tzinfo=timezone.utc)
+                query = query.filter(Order.created_at <= end)
+        
+        # Pagination
+        offset = (page - 1) * per_page
+        orders = query.order_by(Order.created_at.desc()).offset(offset).limit(per_page).all()
+        
+        # Convert orders to response, handling validation errors gracefully
+        result = []
+        for order in orders:
+            try:
+                # Manually construct order data to handle missing wholesale_amount column
+                order_dict = {
+                    'id': order.id,
+                    'order_number': order.order_number,
+                    'seller_id': order.seller_id,
+                    'customer_id': order.customer_id,
+                    'company_id': order.company_id,
+                    'status': order.status_enum,  # Use status_enum property
+                    'payment_method': order.payment_method,
+                    'delivery_method': order.delivery_method,
+                    'installation_date': order.installation_date,
+                    'installation_notes': order.installation_notes,
+                    'total_amount': order.total_amount,
+                    'wholesale_amount': getattr(order, 'wholesale_amount', None),  # Handle missing column gracefully
+                    'cooperation_total_amount': getattr(order, 'cooperation_total_amount', None),  # Handle missing column gracefully
+                    'notes': order.notes,
+                    'is_new': order.is_new,
+                    'created_at': order.created_at,
+                    'items': [OrderItemResponse.model_validate(item) for item in order.items],
+                    'invoice_number': order.invoice_number,
+                    'issue_date': order.issue_date,
+                    'due_date': order.due_date,
+                    'subtotal': order.subtotal,
+                    'tax_amount': order.tax_amount,
+                    'discount_amount': order.discount_amount,
+                    'payment_terms': order.payment_terms,
+                    'edit_requested_by': order.edit_requested_by,
+                    'edit_requested_at': order.edit_requested_at,
+                    'edit_approved_by': order.edit_approved_by,
+                    'edit_approved_at': order.edit_approved_at,
+                    'referrer_id': order.referrer_id,
+                    'referrer_name': getattr(order.referrer, 'full_name', None) if hasattr(order, 'referrer') and order.referrer else None,
+                }
+                
+                # Enrich with customer details
+                if order.customer:
+                    order_dict['customer_name'] = order.customer.name
+                    order_dict['customer_mobile'] = order.customer.mobile
+                    order_dict['customer_address'] = order.customer.address
+                
+                result.append(OrderResponse.model_validate(order_dict))
+            except Exception as e:
+                print(f"⚠️  Error converting order {order.id} to response: {e}")
+                continue
+        
+        return result
+    except Exception as e:
+        print(f"❌ Error in search_invoices endpoint: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"خطا در جستجوی فاکتورها: {str(e)}")
+
+
 @router.get("/{order_id}", response_model=OrderResponse)
 async def get_order(
     order_id: int,
@@ -1246,213 +1438,9 @@ async def approve_invoice_edit(
     return OrderResponse.model_validate(order_dict)
 
 
-@router.get("/search", response_model=List[OrderResponse])
-async def search_invoices(
-    q: Optional[str] = Query(None, description="Search query (invoice number, customer name, etc.)"),
-    status: Optional[str] = Query(None, description="Filter by status"),
-    start_date: Optional[str] = Query(None, description="Start date (ISO format, accepts various formats)"),
-    end_date: Optional[str] = Query(None, description="End date (ISO format, accepts various formats)"),
-    page: int = Query(1, ge=1),
-    per_page: int = Query(20, ge=1, le=1000),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Search invoices by number, date, customer, or status"""
-    try:
-        query = db.query(Order)
-        
-        # Filter by role
-        if current_user.role == UserRole.SELLER:
-            query = query.filter(Order.seller_id == current_user.id)
-        elif current_user.role == UserRole.STORE_MANAGER:
-            # Store Manager sees only orders from sellers they created
-            seller_ids = _get_manager_seller_ids(db, current_user.id)
-            if seller_ids:
-                query = query.filter(Order.seller_id.in_(seller_ids))
-            else:
-                # If manager has no sellers, return empty result
-                query = query.filter(Order.id == -1)  # Impossible condition
-        
-        # Search by query string
-        if q:
-            query = query.filter(
-                (Order.order_number.ilike(f"%{q}%")) |
-                (Order.invoice_number.ilike(f"%{q}%")) |
-                (Order.notes.ilike(f"%{q}%"))
-            )
-        
-        # Filter by status
-        if status:
-            # Convert to lowercase string for comparison (status column is String(50))
-            status_lower = str(status).lower()
-            query = query.filter(Order.status == status_lower)
-        
-        # Eager load customer relationship to avoid N+1 queries
-        query = query.options(joinedload(Order.customer))
-        
-        # Filter by date range
-        # FIXED: Flexible datetime parsing for search to prevent 422 errors
-        # Handles ISO strings with milliseconds, timezones, and various formats
-        if start_date:
-            start = None
-            try:
-                # Handle dates with microseconds but no timezone (e.g., 2025-12-23T00:00:00.000)
-                date_str = start_date.strip()
-                
-                # If it has microseconds but no timezone, strip microseconds first
-                if '.' in date_str and '+' not in date_str and 'Z' not in date_str:
-                    # Split by '.' and take first part (date + time without microseconds)
-                    date_str = date_str.split('.')[0]
-                
-                # Replace Z with +00:00 for timezone
-                if 'Z' in date_str:
-                    date_str = date_str.replace('Z', '+00:00')
-                
-                # Try parsing with fromisoformat
-                try:
-                    start = datetime.fromisoformat(date_str)
-                except ValueError:
-                    # Fallback: Try with strptime
-                    from datetime import timezone
-                    # Try common formats
-                    for fmt in ['%Y-%m-%dT%H:%M:%S', '%Y-%m-%dT%H:%M:%S.%f', '%Y-%m-%d %H:%M:%S', '%Y-%m-%d']:
-                        try:
-                            start = datetime.strptime(date_str.split('+')[0].split('Z')[0], fmt)
-                            break
-                        except ValueError:
-                            continue
-                    if start is None:
-                        raise ValueError("Could not parse date")
-            except (ValueError, AttributeError) as e:
-                # If all parsing fails, log and skip this filter (don't fail the request)
-                print(f"⚠️  Could not parse start_date '{start_date}': {e}. Skipping date filter.")
-                start = None
-            
-            if start:
-                # If naive datetime, make it timezone-aware (assume UTC)
-                if start.tzinfo is None:
-                    from datetime import timezone
-                    start = start.replace(tzinfo=timezone.utc)
-                query = query.filter(Order.created_at >= start)
-        
-        if end_date:
-            end = None
-            try:
-                # Handle dates with microseconds but no timezone (e.g., 2025-12-23T14:04:45.917765)
-                date_str = end_date.strip()
-                
-                # If it has microseconds but no timezone, strip microseconds first
-                if '.' in date_str and '+' not in date_str and 'Z' not in date_str:
-                    # Split by '.' and take first part (date + time without microseconds)
-                    date_str = date_str.split('.')[0]
-                
-                # Replace Z with +00:00 for timezone
-                if 'Z' in date_str:
-                    date_str = date_str.replace('Z', '+00:00')
-                
-                # Try parsing with fromisoformat
-                try:
-                    end = datetime.fromisoformat(date_str)
-                except ValueError:
-                    # Fallback: Try with strptime
-                    from datetime import timezone
-                    # Try common formats
-                    for fmt in ['%Y-%m-%dT%H:%M:%S', '%Y-%m-%dT%H:%M:%S.%f', '%Y-%m-%d %H:%M:%S', '%Y-%m-%d']:
-                        try:
-                            end = datetime.strptime(date_str.split('+')[0].split('Z')[0], fmt)
-                            break
-                        except ValueError:
-                            continue
-                    if end is None:
-                        raise ValueError("Could not parse date")
-            except (ValueError, AttributeError) as e:
-                # If all parsing fails, log and skip this filter (don't fail the request)
-                print(f"⚠️  Could not parse end_date '{end_date}': {e}. Skipping date filter.")
-                end = None
-            
-            if end:
-                # If naive datetime, make it timezone-aware (assume UTC)
-                if end.tzinfo is None:
-                    from datetime import timezone
-                    end = end.replace(tzinfo=timezone.utc)
-                query = query.filter(Order.created_at <= end)
-        
-        # Pagination
-        offset = (page - 1) * per_page
-        orders = query.order_by(Order.created_at.desc()).offset(offset).limit(per_page).all()
-        
-        # Convert orders to response, handling validation errors gracefully
-        result = []
-        for order in orders:
-            try:
-                # Manually construct order data to handle missing wholesale_amount column
-                order_dict = {
-                    'id': order.id,
-                    'order_number': order.order_number,
-                    'seller_id': order.seller_id,
-                    'customer_id': order.customer_id,
-                    'company_id': order.company_id,
-                    'status': order.status_enum,  # Use status_enum property
-                    'payment_method': order.payment_method,
-                    'delivery_method': order.delivery_method,
-                    'installation_date': order.installation_date,
-                    'installation_notes': order.installation_notes,
-                    'total_amount': order.total_amount,
-                    'wholesale_amount': getattr(order, 'wholesale_amount', None),  # Handle missing column gracefully
-                    'cooperation_total_amount': getattr(order, 'cooperation_total_amount', None),  # Handle missing column gracefully
-                    'notes': order.notes,
-                    'is_new': order.is_new,
-                    'created_at': order.created_at,
-                    'items': [OrderItemResponse.model_validate(item) for item in order.items],
-                    'invoice_number': order.invoice_number,
-                    'issue_date': order.issue_date,
-                    'due_date': order.due_date,
-                    'subtotal': order.subtotal,
-                    'tax_amount': order.tax_amount,
-                    'discount_amount': order.discount_amount,
-                    'payment_terms': order.payment_terms,
-                    'edit_requested_by': order.edit_requested_by,
-                    'edit_requested_at': order.edit_requested_at,
-                    'edit_approved_by': order.edit_approved_by,
-                    'edit_approved_at': order.edit_approved_at,
-                    'referrer_id': order.referrer_id,
-                    'referrer_name': getattr(order.referrer, 'full_name', None) if hasattr(order, 'referrer') and order.referrer else None,
-                    # Customer details
-                    'customer_name': order.customer.name if order.customer else None,
-                    'customer_mobile': order.customer.mobile if order.customer else None,
-                    'customer_address': order.customer.address if order.customer else None,
-                }
-                result.append(OrderResponse.model_validate(order_dict))
-            except Exception as e:
-                print(f"⚠️  Error validating order {order.id} in search: {e}")
-                import traceback
-                traceback.print_exc()
-                # Try fallback validation
-                try:
-                    # Ensure status is converted to enum and handle missing wholesale_amount
-                    order_data = order.__dict__.copy()
-                    if 'status' in order_data and not isinstance(order_data['status'], OrderStatus):
-                        order_data['status'] = order.status_enum
-                    # Ensure wholesale_amount exists (set to None if missing)
-                    if 'wholesale_amount' not in order_data:
-                        order_data['wholesale_amount'] = None
-                    # Ensure cooperation_total_amount exists (set to None if missing)
-                    if 'cooperation_total_amount' not in order_data:
-                        order_data['cooperation_total_amount'] = None
-                    result.append(OrderResponse.model_validate(order_data))
-                except Exception as e2:
-                    print(f"❌ Failed to validate order {order.id}: {e2}")
-                    # Skip this order rather than failing the entire request
-                    continue
-        
-        return result
-    except Exception as e:
-        print(f"❌ Error in search_invoices endpoint: {e}")
-        import traceback
-        traceback.print_exc()
-        # Return empty list rather than raising 500 error
-        # This prevents 422/500 errors from breaking the frontend
-        return []
+# NOTE: search_invoices route is already defined earlier (line ~922, before /{order_id})
+# This duplicate definition has been removed to avoid conflicts
+# The route must be defined before /{order_id} to work correctly
 
 
 @router.delete("/{order_id}")

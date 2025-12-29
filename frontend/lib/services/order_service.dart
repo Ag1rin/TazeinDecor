@@ -267,17 +267,38 @@ class OrderService {
       if (startDate != null) queryParams['start_date'] = startDate;
       if (endDate != null) queryParams['end_date'] = endDate;
 
+      print('🔍 searchInvoices called with params: $queryParams');
+      
       final response = await _api.get(
         '/orders/search',
         queryParameters: queryParams,
       );
+      
+      print('🔍 searchInvoices response status: ${response.statusCode}');
+      print('🔍 searchInvoices response data type: ${response.data.runtimeType}');
+      
       if (response.statusCode == 200) {
-        return (response.data as List)
-            .map((json) => OrderModel.fromJson(json))
-            .toList();
+        final data = response.data;
+        if (data is List) {
+          print('🔍 searchInvoices found ${data.length} orders');
+          return data
+              .map((json) => OrderModel.fromJson(json))
+              .toList();
+        } else {
+          print('⚠️ searchInvoices: response.data is not a List: $data');
+          return [];
+        }
       }
+      print('⚠️ searchInvoices: status code is not 200: ${response.statusCode}');
       return [];
     } catch (e) {
+      print('❌ searchInvoices error: $e');
+      if (e is DioException) {
+        print('❌ DioException details:');
+        print('   - Status code: ${e.response?.statusCode}');
+        print('   - Response data: ${e.response?.data}');
+        print('   - Message: ${e.message}');
+      }
       return [];
     }
   }
