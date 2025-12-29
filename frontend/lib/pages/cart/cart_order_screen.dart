@@ -60,24 +60,38 @@ class _CartOrderScreenState extends State<CartOrderScreen> {
     for (final item in cartProvider.items) {
       if (!_productDetailsCache.containsKey(item.product.id) &&
           _loadingProductDetails[item.product.id] != true) {
-        _loadingProductDetails[item.product.id] = true;
-        try {
-          final data = await _productService.getProductFromSecureAPI(
-            item.product.wooId,
-          );
-          if (mounted && data != null) {
-            setState(() {
-              _productDetailsCache[item.product.id] = data;
-              _loadingProductDetails[item.product.id] = false;
-            });
-          }
-        } catch (e) {
-          if (mounted) {
-            setState(() {
-              _loadingProductDetails[item.product.id] = false;
-            });
-          }
+        await _loadProductPrice(item.product.id, item.product.wooId);
+      }
+    }
+  }
+
+  Future<void> _loadProductPrice(int productId, int wooId) async {
+    if (_productDetailsCache.containsKey(productId) ||
+        _loadingProductDetails[productId] == true) {
+      return; // Already loaded or loading
+    }
+
+    _loadingProductDetails[productId] = true;
+    try {
+      final data = await _productService.getProductFromSecureAPI(wooId);
+      if (mounted && data != null) {
+        setState(() {
+          _productDetailsCache[productId] = data;
+          _loadingProductDetails[productId] = false;
+        });
+      } else {
+        if (mounted) {
+          setState(() {
+            _loadingProductDetails[productId] = false;
+          });
         }
+      }
+    } catch (e) {
+      print('❌ Error loading product price for $productId: $e');
+      if (mounted) {
+        setState(() {
+          _loadingProductDetails[productId] = false;
+        });
       }
     }
   }
@@ -157,11 +171,61 @@ class _CartOrderScreenState extends State<CartOrderScreen> {
       return;
     }
 
-    // Check if all products have cooperation price (colleaguePrice)
-    // First, try to get price from cache if product doesn't have colleaguePrice
+    // Ensure all product prices are loaded before proceeding
+    // Load missing prices first
+    final List<Future<void>> loadTasks = [];
+    for (final item in cartProvider.items) {
+      // Check if we need to load price
+      bool needsLoad = false;
+      
+      // Check if product has price
+      if (item.product.displayPrice == null || item.product.displayPrice! <= 0) {
+        // Check if we have it in cache
+        if (!_productDetailsCache.containsKey(item.product.id)) {
+          // Not in cache, need to load
+          if (_loadingProductDetails[item.product.id] != true) {
+            needsLoad = true;
+            print('🔄 Need to load price for product ${item.product.id} (wooId: ${item.product.wooId})');
+          } else {
+            print('⏳ Product ${item.product.id} is already loading...');
+          }
+        } else {
+          print('✅ Product ${item.product.id} already in cache');
+        }
+      } else {
+        print('✅ Product ${item.product.id} has price: ${item.product.displayPrice}');
+      }
+      
+      if (needsLoad) {
+        loadTasks.add(_loadProductPrice(item.product.id, item.product.wooId));
+      }
+    }
+    
+    // Wait for all prices to load (with timeout)
+    if (loadTasks.isNotEmpty) {
+      Fluttertoast.showToast(
+        msg: 'در حال دریافت قیمت‌های همکاری...',
+        toastLength: Toast.LENGTH_SHORT,
+      );
+      
+      try {
+        await Future.wait(loadTasks, eagerError: false).timeout(
+          const Duration(seconds: 10),
+          onTimeout: () {
+            print('⚠️ Timeout waiting for prices to load');
+            return <void>[];
+          },
+        );
+      } catch (e) {
+        print('⚠️ Error loading prices: $e');
+      }
+    }
+    
+    // Now check if all products have cooperation price
     final itemsWithoutPrice = cartProvider.items.where((item) {
       // First check if product has colleaguePrice
       if (item.product.displayPrice != null && item.product.displayPrice! > 0) {
+        print('✅ Product ${item.product.id} has displayPrice: ${item.product.displayPrice}');
         return false;
       }
       
@@ -173,67 +237,29 @@ class _CartOrderScreenState extends State<CartOrderScreen> {
           final price = colleaguePrice is num ? colleaguePrice.toDouble() : 
                        (colleaguePrice is String ? double.tryParse(colleaguePrice) : null);
           if (price != null && price > 0) {
+            print('✅ Product ${item.product.id} has price in cache: $price');
             return false; // Price found in cache
+          } else {
+            print('⚠️ Product ${item.product.id} has invalid price in cache: $colleaguePrice');
           }
+        } else {
+          print('⚠️ Product ${item.product.id} in cache but no colleague_price');
         }
+      } else {
+        print('❌ Product ${item.product.id} not in cache');
       }
       
       // No price found
+      print('❌ Product ${item.product.id} (${item.product.name}) has no price');
       return true;
     }).toList();
     
     if (itemsWithoutPrice.isNotEmpty) {
-      // Try to load missing prices before showing error
-      bool allLoaded = true;
-      for (final item in itemsWithoutPrice) {
-        if (!_productDetailsCache.containsKey(item.product.id) &&
-            _loadingProductDetails[item.product.id] != true) {
-          allLoaded = false;
-          break;
-        }
-      }
-      
-      if (!allLoaded) {
-        // Still loading, wait a bit and show message
-        Fluttertoast.showToast(
-          msg: 'در حال دریافت قیمت‌های همکاری... لطفا چند لحظه صبر کنید.',
-          toastLength: Toast.LENGTH_LONG,
-        );
-        // Wait for prices to load
-        await Future.delayed(const Duration(seconds: 2));
-        // Retry check
-        final retryItemsWithoutPrice = cartProvider.items.where((item) {
-          if (item.product.displayPrice != null && item.product.displayPrice! > 0) {
-            return false;
-          }
-          final cachedData = _productDetailsCache[item.product.id];
-          if (cachedData != null) {
-            final colleaguePrice = cachedData['colleague_price'];
-            if (colleaguePrice != null) {
-              final price = colleaguePrice is num ? colleaguePrice.toDouble() : 
-                           (colleaguePrice is String ? double.tryParse(colleaguePrice) : null);
-              if (price != null && price > 0) {
-                return false;
-              }
-            }
-          }
-          return true;
-        }).toList();
-        
-        if (retryItemsWithoutPrice.isNotEmpty) {
-          Fluttertoast.showToast(
-            msg: 'برخی محصولات قیمت همکاری ندارند. لطفا صفحه را رفرش کنید و دوباره تلاش کنید.',
-            toastLength: Toast.LENGTH_LONG,
-          );
-          return;
-        }
-      } else {
-        Fluttertoast.showToast(
-          msg: 'برخی محصولات قیمت همکاری ندارند. لطفا صفحه را رفرش کنید و دوباره تلاش کنید.',
-          toastLength: Toast.LENGTH_LONG,
-        );
-        return;
-      }
+      Fluttertoast.showToast(
+        msg: 'برخی محصولات قیمت همکاری ندارند. لطفا صفحه را رفرش کنید و دوباره تلاش کنید.',
+        toastLength: Toast.LENGTH_LONG,
+      );
+      return;
     }
 
     setState(() {

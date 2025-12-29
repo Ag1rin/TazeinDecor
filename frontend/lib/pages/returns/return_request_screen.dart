@@ -12,7 +12,6 @@ import '../../utils/app_colors.dart';
 import '../../utils/persian_number.dart';
 import '../../utils/persian_date.dart';
 import '../../utils/product_unit_display.dart';
-import '../../utils/order_total_calculator.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
@@ -54,12 +53,14 @@ class _ReturnRequestScreenState extends State<ReturnRequestScreen> {
       });
       // Load product details for all items
       for (var item in order.items) {
-        _loadProductDetails(item.productId, item.variationId);
+        // Use wooId if available, otherwise use productId
+        final wooId = item.product?.wooId ?? item.productId;
+        _loadProductDetails(item.productId, wooId, item.variationId);
       }
     }
   }
 
-  Future<void> _loadProductDetails(int productId, int? variationId) async {
+  Future<void> _loadProductDetails(int productId, int wooId, int? variationId) async {
     if (_productDetailsCache.containsKey(productId) ||
         _loadingProductDetails[productId] == true) {
       return; // Already loaded or loading
@@ -70,20 +71,22 @@ class _ReturnRequestScreenState extends State<ReturnRequestScreen> {
     });
 
     try {
-      // Fetch from secure API
-      final data = await _productService.getProductFromSecureAPI(productId);
+      // Fetch from secure API using wooId
+      final data = await _productService.getProductFromSecureAPI(wooId);
       if (mounted && data != null) {
         setState(() {
           _productDetailsCache[productId] = data;
           _loadingProductDetails[productId] = false;
         });
+        print('✅ Loaded product details for productId=$productId, wooId=$wooId, name=${data['name']}');
       } else {
+        print('⚠️ No data received for productId=$productId, wooId=$wooId');
         setState(() {
           _loadingProductDetails[productId] = false;
         });
       }
     } catch (e) {
-      print('Error loading product details for $productId: $e');
+      print('❌ Error loading product details for productId=$productId, wooId=$wooId: $e');
       if (mounted) {
         setState(() {
           _loadingProductDetails[productId] = false;
@@ -494,10 +497,17 @@ class _ReturnRequestScreenState extends State<ReturnRequestScreen> {
       colleaguePrice = item.product!.colleaguePrice;
     }
 
-    // Get product name - prefer from cache, then from item
-    final productName = productDetails?['name']?.toString() ?? 
-                       item.product?.name ?? 
-                       'محصول';
+    // Get product name - prefer from cache, then from item, then fallback with productId
+    String productName = 'محصول ${item.productId}';
+    if (productDetails != null && productDetails['name'] != null) {
+      productName = productDetails['name'].toString();
+      print('✅ Product name from cache: $productName');
+    } else if (item.product?.name != null && item.product!.name.isNotEmpty) {
+      productName = item.product!.name;
+      print('✅ Product name from item.product: $productName');
+    } else {
+      print('⚠️ Product name not found, using fallback: $productName');
+    }
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
