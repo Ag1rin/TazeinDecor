@@ -32,7 +32,9 @@ class InvoiceDetailScreen extends StatefulWidget {
 }
 
 class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
+  // ignore: unused_field
   bool _isGeneratingPdf = false;
+  // ignore: unused_field
   bool _isLoadingBrands = false;
   bool _isLoadingInvoice = false;
   OrderModel? _currentInvoice;
@@ -83,6 +85,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     return brandItems;
   }
 
+  // ignore: unused_element
   Future<void> _shareInvoiceAsPdf() async {
     setState(() {
       _isLoadingBrands = true;
