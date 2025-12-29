@@ -216,8 +216,6 @@ class Company(Base):
     address = Column(Text, nullable=True)
     logo = Column(String, nullable=True)
     notes = Column(Text, nullable=True)
-    brand_name = Column(String, nullable=True)  # Brand name to match with product brands
-    brand_thumbnail = Column(String, nullable=True)  # Thumbnail image for the brand
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     

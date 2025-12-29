@@ -463,8 +463,6 @@ class AggregatedPdfService {
         ),
         textDirection: pw.TextDirection.rtl,
         textAlign: pw.TextAlign.right,
-        maxLines: 3,
-        overflow: pw.TextOverflow.clip,
       ),
     );
   }
@@ -530,8 +528,7 @@ class AggregatedPdfService {
     );
   }
 
-  /// Build total row helper (kept for potential future use)
-  // ignore: unused_element
+  /// Build total row helper
   static pw.Widget _buildTotalRow(
     String label,
     double amount, {
@@ -555,7 +552,6 @@ class AggregatedPdfService {
               color: PdfColors.black,
             ),
             textDirection: pw.TextDirection.rtl,
-            textAlign: pw.TextAlign.right,
           ),
           pw.Text(
             label,
@@ -565,7 +561,6 @@ class AggregatedPdfService {
               color: PdfColors.black,
             ),
             textDirection: pw.TextDirection.rtl,
-            textAlign: pw.TextAlign.right,
           ),
         ],
       ),
@@ -630,29 +625,16 @@ class AggregatedPdfService {
                   color: PdfColors.blue700,
                 ),
                 textDirection: pw.TextDirection.rtl,
-                textAlign: pw.TextAlign.right,
               ),
               pw.SizedBox(height: 8),
               pw.Text(
-                'درخواست از شرکت',
+                'فاکتور خرید',
                 style: pw.TextStyle(
                   font: _vazirBold,
                   fontSize: 18,
                   color: PdfColors.black,
                 ),
                 textDirection: pw.TextDirection.rtl,
-                textAlign: pw.TextAlign.right,
-              ),
-              pw.SizedBox(height: 4),
-              pw.Text(
-                'این فاکتور برای درخواست از شرکت جهت تامین کالا می‌باشد',
-                style: pw.TextStyle(
-                  font: _vazirRegular,
-                  fontSize: 12,
-                  color: PdfColors.grey700,
-                ),
-                textDirection: pw.TextDirection.rtl,
-                textAlign: pw.TextAlign.right,
               ),
             ],
           ),
@@ -699,29 +681,16 @@ class AggregatedPdfService {
                   color: PdfColors.blue700,
                 ),
                 textDirection: pw.TextDirection.rtl,
-                textAlign: pw.TextAlign.right,
               ),
               pw.SizedBox(height: 8),
               pw.Text(
-                'درخواست از شرکت',
+                'فاکتور خرید',
                 style: pw.TextStyle(
                   font: _vazirBold,
                   fontSize: 18,
                   color: PdfColors.black,
                 ),
                 textDirection: pw.TextDirection.rtl,
-                textAlign: pw.TextAlign.right,
-              ),
-              pw.SizedBox(height: 4),
-              pw.Text(
-                'این فاکتور برای درخواست از شرکت جهت تامین کالا می‌باشد',
-                style: pw.TextStyle(
-                  font: _vazirRegular,
-                  fontSize: 12,
-                  color: PdfColors.grey700,
-                ),
-                textDirection: pw.TextDirection.rtl,
-                textAlign: pw.TextAlign.right,
               ),
             ],
           ),
@@ -759,19 +728,15 @@ class AggregatedPdfService {
           pw.Row(
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             children: [
-              pw.Expanded(
-                child: pw.Text(
-                  PersianDate.formatDate(invoice.issueDate ?? invoice.createdAt),
-                  style: pw.TextStyle(font: _vazirRegular, fontSize: 11),
-                  textDirection: pw.TextDirection.rtl,
-                  textAlign: pw.TextAlign.right,
-                ),
+              pw.Text(
+                PersianDate.formatDate(invoice.issueDate ?? invoice.createdAt),
+                style: pw.TextStyle(font: _vazirRegular, fontSize: 11),
+                textDirection: pw.TextDirection.rtl,
               ),
               pw.Text(
                 'تاریخ:',
                 style: pw.TextStyle(font: _vazirBold, fontSize: 11),
                 textDirection: pw.TextDirection.rtl,
-                textAlign: pw.TextAlign.right,
               ),
             ],
           ),
@@ -779,19 +744,15 @@ class AggregatedPdfService {
           pw.Row(
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             children: [
-              pw.Expanded(
-                child: pw.Text(
-                  PersianNumber.toPersian(invoice.effectiveInvoiceNumber),
-                  style: pw.TextStyle(font: _vazirRegular, fontSize: 11),
-                  textDirection: pw.TextDirection.rtl,
-                  textAlign: pw.TextAlign.right,
-                ),
+              pw.Text(
+                PersianNumber.toPersian(invoice.effectiveInvoiceNumber),
+                style: pw.TextStyle(font: _vazirRegular, fontSize: 11),
+                textDirection: pw.TextDirection.rtl,
               ),
               pw.Text(
                 'شماره فاکتور:',
                 style: pw.TextStyle(font: _vazirBold, fontSize: 11),
                 textDirection: pw.TextDirection.rtl,
-                textAlign: pw.TextAlign.right,
               ),
             ],
           ),
@@ -799,19 +760,15 @@ class AggregatedPdfService {
           pw.Row(
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             children: [
-              pw.Expanded(
-                child: pw.Text(
-                  PersianNumber.toPersian(invoice.orderNumber),
-                  style: pw.TextStyle(font: _vazirRegular, fontSize: 11),
-                  textDirection: pw.TextDirection.rtl,
-                  textAlign: pw.TextAlign.right,
-                ),
+              pw.Text(
+                PersianNumber.toPersian(invoice.orderNumber),
+                style: pw.TextStyle(font: _vazirRegular, fontSize: 11),
+                textDirection: pw.TextDirection.rtl,
               ),
               pw.Text(
                 'شماره سفارش:',
                 style: pw.TextStyle(font: _vazirBold, fontSize: 11),
                 textDirection: pw.TextDirection.rtl,
-                textAlign: pw.TextAlign.right,
               ),
             ],
           ),
@@ -831,48 +788,19 @@ class AggregatedPdfService {
         crossAxisAlignment: pw.CrossAxisAlignment.end,
         children: [
           pw.Text(
-            'جزئیات درخواست',
+            'اطلاعات مشتری',
             style: pw.TextStyle(
               font: _vazirBold,
               fontSize: 14,
               color: PdfColors.blue700,
             ),
             textDirection: pw.TextDirection.rtl,
-            textAlign: pw.TextAlign.right,
           ),
           pw.SizedBox(height: 8),
-          if (invoice.customerName != null) ...[
-            pw.Text(
-              'نام مشتری: ${invoice.customerName}',
-              style: pw.TextStyle(font: _vazirRegular, fontSize: 11),
-              textDirection: pw.TextDirection.rtl,
-              textAlign: pw.TextAlign.right,
-            ),
-            pw.SizedBox(height: 4),
-          ],
-          if (invoice.customerMobile != null) ...[
-            pw.Text(
-              'شماره تماس: ${PersianNumber.toPersian(invoice.customerMobile!)}',
-              style: pw.TextStyle(font: _vazirRegular, fontSize: 11),
-              textDirection: pw.TextDirection.rtl,
-              textAlign: pw.TextAlign.right,
-            ),
-            pw.SizedBox(height: 4),
-          ],
-          if (invoice.customerAddress != null && invoice.customerAddress!.isNotEmpty) ...[
-            pw.Text(
-              'آدرس: ${invoice.customerAddress}',
-              style: pw.TextStyle(font: _vazirRegular, fontSize: 11),
-              textDirection: pw.TextDirection.rtl,
-              textAlign: pw.TextAlign.right,
-            ),
-            pw.SizedBox(height: 4),
-          ],
           pw.Text(
             'شماره سفارش: ${PersianNumber.toPersian(invoice.orderNumber)}',
             style: pw.TextStyle(font: _vazirRegular, fontSize: 11),
             textDirection: pw.TextDirection.rtl,
-            textAlign: pw.TextAlign.right,
           ),
         ],
       ),
@@ -884,16 +812,18 @@ class AggregatedPdfService {
       border: pw.TableBorder.all(color: PdfColors.grey400, width: 1),
       columnWidths: {
         0: const pw.FlexColumnWidth(0.5), // ردیف
-        1: const pw.FlexColumnWidth(1.5), // کد محصول
-        2: const pw.FlexColumnWidth(1.0), // تعداد با واحد
-        3: const pw.FlexColumnWidth(3.0), // نام محصول
+        1: const pw.FlexColumnWidth(2.5), // نام محصول
+        2: const pw.FlexColumnWidth(1.0), // تعداد
+        3: const pw.FlexColumnWidth(1.2), // قیمت واحد
+        4: const pw.FlexColumnWidth(1.2), // مبلغ کل
       },
       children: [
         // Header row
         pw.TableRow(
           decoration: const pw.BoxDecoration(color: PdfColors.grey200),
           children: [
-            _buildTableCell('کد محصول', isHeader: true),
+            _buildTableCell('مبلغ کل', isHeader: true),
+            _buildTableCell('قیمت واحد', isHeader: true),
             _buildTableCell('تعداد', isHeader: true),
             _buildTableCell('نام محصول', isHeader: true),
             _buildTableCell('ردیف', isHeader: true),
@@ -903,15 +833,12 @@ class AggregatedPdfService {
         ...invoice.items.asMap().entries.map((entry) {
           final index = entry.key;
           final item = entry.value;
-          
-          // Get product SKU/code
-          final productSku = item.product?.sku ?? 
-                            'SKU-${item.productId}';
 
           return pw.TableRow(
             decoration: const pw.BoxDecoration(color: PdfColors.white),
             children: [
-              _buildTableCell(productSku),
+              _buildTableCell(PersianNumber.formatPrice(item.total)),
+              _buildTableCell(PersianNumber.formatPrice(item.price)),
               _buildTableCell(
                 '${PersianNumber.formatNumber(item.quantity.toInt())} ${item.unit}',
               ),
@@ -929,16 +856,18 @@ class AggregatedPdfService {
       border: pw.TableBorder.all(color: PdfColors.grey400, width: 1),
       columnWidths: {
         0: const pw.FlexColumnWidth(0.5), // ردیف
-        1: const pw.FlexColumnWidth(1.5), // کد محصول
-        2: const pw.FlexColumnWidth(1.0), // تعداد با واحد
-        3: const pw.FlexColumnWidth(3.0), // نام محصول
+        1: const pw.FlexColumnWidth(2.5), // نام محصول
+        2: const pw.FlexColumnWidth(1.0), // تعداد
+        3: const pw.FlexColumnWidth(1.2), // قیمت واحد
+        4: const pw.FlexColumnWidth(1.2), // مبلغ کل
       },
       children: [
         // Header row
         pw.TableRow(
           decoration: const pw.BoxDecoration(color: PdfColors.grey200),
           children: [
-            _buildTableCell('کد محصول', isHeader: true),
+            _buildTableCell('مبلغ کل', isHeader: true),
+            _buildTableCell('قیمت واحد', isHeader: true),
             _buildTableCell('تعداد', isHeader: true),
             _buildTableCell('نام محصول', isHeader: true),
             _buildTableCell('ردیف', isHeader: true),
@@ -948,15 +877,12 @@ class AggregatedPdfService {
         ...items.asMap().entries.map((entry) {
           final index = entry.key;
           final item = entry.value;
-          
-          // Get product SKU/code
-          final productSku = item.product?.sku ?? 
-                            'SKU-${item.productId}';
 
           return pw.TableRow(
             decoration: const pw.BoxDecoration(color: PdfColors.white),
             children: [
-              _buildTableCell(productSku),
+              _buildTableCell(PersianNumber.formatPrice(item.total)),
+              _buildTableCell(PersianNumber.formatPrice(item.price)),
               _buildTableCell(
                 '${PersianNumber.formatNumber(item.quantity.toInt())} ${item.unit}',
               ),
@@ -970,12 +896,12 @@ class AggregatedPdfService {
   }
 
   static pw.Widget _buildSingleTotals(OrderModel invoice) {
-    // Calculate total quantity by unit
-    final Map<String, double> quantityByUnit = {};
-    for (final item in invoice.items) {
-      final unit = item.unit;
-      quantityByUnit[unit] = (quantityByUnit[unit] ?? 0) + item.quantity;
-    }
+    // ALWAYS use wholesaleAmount (cooperation price) for calculations
+    // This ensures PDF invoices show the actual amount the seller pays
+    // Never use retail price (totalAmount) - only cooperation price
+    final baseAmount = invoice.wholesaleAmount ?? 0.0;
+    final subtotal = invoice.subtotal ?? baseAmount;
+    final grandTotal = invoice.grandTotal; // This now uses wholesaleAmount internally
 
     return pw.Container(
       padding: const pw.EdgeInsets.all(12),
@@ -986,50 +912,14 @@ class AggregatedPdfService {
       child: pw.Column(
         crossAxisAlignment: pw.CrossAxisAlignment.end,
         children: [
-          pw.Text(
-            'خلاصه درخواست',
-            style: pw.TextStyle(
-              font: _vazirBold,
-              fontSize: 14,
-              color: PdfColors.blue700,
-            ),
-            textDirection: pw.TextDirection.rtl,
-            textAlign: pw.TextAlign.right,
-          ),
-          pw.SizedBox(height: 8),
-          // Quantity by unit
-          for (final entry in quantityByUnit.entries)
-            pw.Padding(
-              padding: const pw.EdgeInsets.symmetric(vertical: 4),
-              child: pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text(
-                    '${PersianNumber.formatNumber(entry.value.toInt())} ${entry.key}',
-                    style: pw.TextStyle(font: _vazirRegular, fontSize: 11),
-                    textDirection: pw.TextDirection.rtl,
-                    textAlign: pw.TextAlign.right,
-                  ),
-                  pw.Text(
-                    'تعداد کل (${entry.key}):',
-                    style: pw.TextStyle(font: _vazirBold, fontSize: 11),
-                    textDirection: pw.TextDirection.rtl,
-                    textAlign: pw.TextAlign.right,
-                  ),
-                ],
-              ),
-            ),
-          pw.SizedBox(height: 8),
-          pw.Text(
-            'تعداد کل اقلام: ${PersianNumber.formatNumber(invoice.items.length)}',
-            style: pw.TextStyle(
-              font: _vazirBold,
-              fontSize: 12,
-              color: PdfColors.black,
-            ),
-            textDirection: pw.TextDirection.rtl,
-            textAlign: pw.TextAlign.right,
-          ),
+          _buildTotalRow('جمع کل:', subtotal),
+          if (invoice.taxAmount > 0)
+            _buildTotalRow('مالیات:', invoice.taxAmount),
+          if (invoice.discountAmount > 0)
+            _buildTotalRow('تخفیف:', -invoice.discountAmount, isDiscount: true),
+          pw.Divider(color: PdfColors.black, thickness: 2),
+          pw.SizedBox(height: 4),
+          _buildTotalRow('مبلغ نهایی:', grandTotal, isGrandTotal: true),
         ],
       ),
     );
@@ -1041,8 +931,29 @@ class AggregatedPdfService {
     double discountAmount,
     double grandTotal,
   ) {
-    // This method is kept for compatibility but totals are not shown in company request PDF
-    return pw.SizedBox.shrink();
+    return pw.Container(
+      padding: const pw.EdgeInsets.all(12),
+      decoration: pw.BoxDecoration(
+        border: pw.Border.all(color: PdfColors.grey400, width: 1),
+        borderRadius: pw.BorderRadius.circular(4),
+      ),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.end,
+        children: [
+          _buildTotalRow('جمع کل (این برند):', subtotal),
+          if (taxAmount > 0) _buildTotalRow('مالیات (نسبی):', taxAmount),
+          if (discountAmount > 0)
+            _buildTotalRow('تخفیف (نسبی):', -discountAmount, isDiscount: true),
+          pw.Divider(color: PdfColors.black, thickness: 2),
+          pw.SizedBox(height: 4),
+          _buildTotalRow(
+            'مبلغ نهایی (این برند):',
+            grandTotal,
+            isGrandTotal: true,
+          ),
+        ],
+      ),
+    );
   }
 
   static pw.Widget _buildSingleFooter(OrderModel invoice) {
@@ -1063,18 +974,16 @@ class AggregatedPdfService {
               color: PdfColors.grey700,
             ),
             textDirection: pw.TextDirection.rtl,
-            textAlign: pw.TextAlign.center,
           ),
           pw.SizedBox(height: 4),
           pw.Text(
-            'این درخواست برای تامین کالا از شرکت می‌باشد',
+            'با تشکر از خرید شما',
             style: pw.TextStyle(
               font: _vazirBold,
               fontSize: 12,
               color: PdfColors.blue700,
             ),
             textDirection: pw.TextDirection.rtl,
-            textAlign: pw.TextAlign.center,
           ),
         ],
       ),
