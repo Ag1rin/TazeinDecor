@@ -50,7 +50,7 @@ class AppConfig {
 
   // App Info
   static const String appName = 'تزئین دکور';
-  static const String appVersion = '1.0.0';
+  static const String appVersion = '1.0.1';
 
   // Colors
   static const int primaryBlue = 0xFF2196F3;
