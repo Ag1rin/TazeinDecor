@@ -62,6 +62,18 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
     super.dispose();
   }
 
+  /// Helper function to parse double from dynamic value (String or num)
+  double? _parseDouble(dynamic value) {
+    if (value == null) return null;
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
+    if (value is String) {
+      return double.tryParse(value);
+    }
+    if (value is num) return value.toDouble();
+    return null;
+  }
+
   Future<void> _loadInvoices() async {
     if (_selectedStatus == 'returned') {
       // Load return requests instead of orders
@@ -916,24 +928,48 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
         return;
       }
 
-      // Group items by brand
+      // Group items by brand - fetch brand from API if not available
       final Map<String, List<OrderItemModel>> brandItems = {};
       final Map<String, int?> brandCompanyIds = {};
       final Map<String, List<OrderModel>> brandOrders = {};
+      final Map<int, String?> _productBrandCache = {}; // Cache for brand data per product
 
       for (final order in orders) {
         for (final item in order.items) {
-          final brand = item.effectiveBrand ?? 'بدون برند';
+          String? brand = item.effectiveBrand;
 
-          if (!brandItems.containsKey(brand)) {
-            brandItems[brand] = [];
-            brandCompanyIds[brand] = order.companyId;
-            brandOrders[brand] = [];
+          // If no brand, try to fetch from secure API
+          if (brand == null && !_productBrandCache.containsKey(item.productId)) {
+            try {
+              final data = await _productService.getProductFromSecureAPI(
+                item.productId,
+              );
+              if (data != null && data['brand'] != null) {
+                brand = data['brand'].toString();
+                _productBrandCache[item.productId] = brand;
+              } else {
+                _productBrandCache[item.productId] = null;
+              }
+            } catch (e) {
+              print('⚠️ Error fetching brand for product ${item.productId}: $e');
+              _productBrandCache[item.productId] = null;
+            }
+          } else if (_productBrandCache.containsKey(item.productId)) {
+            brand = _productBrandCache[item.productId];
           }
 
-          brandItems[brand]!.add(item);
-          if (!brandOrders[brand]!.any((o) => o.id == order.id)) {
-            brandOrders[brand]!.add(order);
+          // Use a default brand name if still null
+          final brandKey = brand ?? 'بدون برند';
+
+          if (!brandItems.containsKey(brandKey)) {
+            brandItems[brandKey] = [];
+            brandCompanyIds[brandKey] = order.companyId;
+            brandOrders[brandKey] = [];
+          }
+
+          brandItems[brandKey]!.add(item.copyWithBrand(brand));
+          if (!brandOrders[brandKey]!.any((o) => o.id == order.id)) {
+            brandOrders[brandKey]!.add(order);
           }
         }
       }
@@ -996,7 +1032,12 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
           children: [
             const Icon(Icons.business, color: AppColors.primaryBlue),
             const SizedBox(width: 8),
-            Text('انتخاب برند برای $dateLabel'),
+            Expanded(
+              child: Text(
+                'انتخاب برند برای $dateLabel',
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           ],
         ),
         content: SizedBox(
@@ -1138,7 +1179,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                 id: item.productId,
                 wooId: productDetails['woo_id'] ?? item.productId,
                 name: productDetails['name']?.toString() ?? 'محصول',
-                price: (productDetails['price'] ?? 0).toDouble(),
+                price: _parseDouble(productDetails['price']) ?? 0.0,
                 stockQuantity: productDetails['stock_quantity'] ?? 0,
                 status: productDetails['status'] ?? 'available',
                 imageUrl: productDetails['image_url']?.toString(),
@@ -1154,13 +1195,13 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
         }),
       );
 
-      // Generate PDF
+      // Generate PDF - use local date (not UTC) to avoid date shift
       final pdfBytes = await AggregatedPdfService.generateBrandInvoicePdf(
         brandName: brandName,
         items: enrichedItems,
         orders: orders,
         periodLabel: periodLabel,
-        periodDate: startDateUtc,
+        periodDate: startLocal, // Use local date instead of UTC
         company: company,
       );
 
@@ -1507,12 +1548,12 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                 sku: productDetails['sku']?.toString(),
                 description: null,
                 shortDescription: null,
-                price: (productDetails['price'] ?? 0).toDouble(),
-                regularPrice: productDetails['regular_price']?.toDouble(),
-                salePrice: productDetails['sale_price']?.toDouble(),
+                price: _parseDouble(productDetails['price']) ?? 0.0,
+                regularPrice: _parseDouble(productDetails['regular_price']),
+                salePrice: _parseDouble(productDetails['sale_price']),
                 stockQuantity: productDetails['stock_quantity'] ?? 0,
                 status: productDetails['status'] ?? 'available',
-                packageArea: productDetails['package_area']?.toDouble(),
+                packageArea: _parseDouble(productDetails['package_area']),
                 designCode: productDetails['design_code']?.toString(),
                 albumCode: productDetails['album_code']?.toString(),
                 rollCount: productDetails['roll_count'],
@@ -1528,7 +1569,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                         .map((attr) => ProductAttribute.fromJson(attr))
                         .toList()
                     : const [],
-                colleaguePrice: productDetails['colleague_price']?.toDouble(),
+                colleaguePrice: _parseDouble(productDetails['colleague_price']),
                 calculator: productDetails['calculator'] != null
                     ? ProductCalculator.fromJson(productDetails['calculator'])
                     : null,

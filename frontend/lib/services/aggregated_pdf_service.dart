@@ -262,8 +262,9 @@ class AggregatedPdfService {
       print('⚠️ Error loading brand logo: $e');
     }
 
-    // Format period date
-    final periodDateFormatted = PersianDate.formatDate(periodDate);
+    // Format period date - ensure we use local timezone
+    final localPeriodDate = periodDate.isUtc ? periodDate.toLocal() : periodDate;
+    final periodDateFormatted = PersianDate.formatDate(localPeriodDate);
 
     // Create PDF
     final pdf = pw.Document();
@@ -430,7 +431,12 @@ class AggregatedPdfService {
 
   /// Extract design code or feature code from product
   static String? _extractDesignCode(OrderItemModel item) {
-    // First try designCode from product
+    // First try variation pattern (this is the design code for variable products)
+    if (item.variationPattern != null && item.variationPattern!.isNotEmpty) {
+      return item.variationPattern;
+    }
+    
+    // Then try designCode from product
     if (item.product?.designCode != null && item.product!.designCode!.isNotEmpty) {
       return item.product!.designCode;
     }
@@ -898,10 +904,11 @@ class AggregatedPdfService {
       border: pw.TableBorder.all(color: PdfColors.grey400, width: 1),
       columnWidths: {
         0: const pw.FlexColumnWidth(0.5), // ردیف
-        1: const pw.FlexColumnWidth(2.5), // نام محصول
-        2: const pw.FlexColumnWidth(1.0), // تعداد
-        3: const pw.FlexColumnWidth(1.2), // قیمت واحد
-        4: const pw.FlexColumnWidth(1.2), // مبلغ کل
+        1: const pw.FlexColumnWidth(2.0), // نام محصول
+        2: const pw.FlexColumnWidth(1.2), // کد طرح
+        3: const pw.FlexColumnWidth(1.0), // تعداد
+        4: const pw.FlexColumnWidth(1.2), // قیمت واحد
+        5: const pw.FlexColumnWidth(1.2), // مبلغ کل
       },
       children: [
         // Header row
@@ -911,6 +918,7 @@ class AggregatedPdfService {
             _buildTableCell('مبلغ کل', isHeader: true),
             _buildTableCell('قیمت واحد', isHeader: true),
             _buildTableCell('تعداد', isHeader: true),
+            _buildTableCell('کد طرح', isHeader: true),
             _buildTableCell('نام محصول', isHeader: true),
             _buildTableCell('ردیف', isHeader: true),
           ],
@@ -919,6 +927,7 @@ class AggregatedPdfService {
         ...invoice.items.asMap().entries.map((entry) {
           final index = entry.key;
           final item = entry.value;
+          final designCode = _extractDesignCode(item) ?? '-';
 
           return pw.TableRow(
             decoration: const pw.BoxDecoration(color: PdfColors.white),
@@ -928,6 +937,7 @@ class AggregatedPdfService {
               _buildTableCell(
                 '${PersianNumber.formatNumber(item.quantity.toInt())} ${item.unit}',
               ),
+              _buildTableCell(designCode),
               _buildTableCell(item.product?.name ?? 'محصول'),
               _buildTableCell(PersianNumber.formatNumber((index + 1).toInt())),
             ],
@@ -942,10 +952,11 @@ class AggregatedPdfService {
       border: pw.TableBorder.all(color: PdfColors.grey400, width: 1),
       columnWidths: {
         0: const pw.FlexColumnWidth(0.5), // ردیف
-        1: const pw.FlexColumnWidth(2.5), // نام محصول
-        2: const pw.FlexColumnWidth(1.0), // تعداد
-        3: const pw.FlexColumnWidth(1.2), // قیمت واحد
-        4: const pw.FlexColumnWidth(1.2), // مبلغ کل
+        1: const pw.FlexColumnWidth(2.0), // نام محصول
+        2: const pw.FlexColumnWidth(1.2), // کد طرح
+        3: const pw.FlexColumnWidth(1.0), // تعداد
+        4: const pw.FlexColumnWidth(1.2), // قیمت واحد
+        5: const pw.FlexColumnWidth(1.2), // مبلغ کل
       },
       children: [
         // Header row
@@ -955,6 +966,7 @@ class AggregatedPdfService {
             _buildTableCell('مبلغ کل', isHeader: true),
             _buildTableCell('قیمت واحد', isHeader: true),
             _buildTableCell('تعداد', isHeader: true),
+            _buildTableCell('کد طرح', isHeader: true),
             _buildTableCell('نام محصول', isHeader: true),
             _buildTableCell('ردیف', isHeader: true),
           ],
@@ -963,6 +975,7 @@ class AggregatedPdfService {
         ...items.asMap().entries.map((entry) {
           final index = entry.key;
           final item = entry.value;
+          final designCode = _extractDesignCode(item) ?? '-';
 
           return pw.TableRow(
             decoration: const pw.BoxDecoration(color: PdfColors.white),
@@ -972,6 +985,7 @@ class AggregatedPdfService {
               _buildTableCell(
                 '${PersianNumber.formatNumber(item.quantity.toInt())} ${item.unit}',
               ),
+              _buildTableCell(designCode),
               _buildTableCell(item.product?.name ?? 'محصول'),
               _buildTableCell(PersianNumber.formatNumber((index + 1).toInt())),
             ],
