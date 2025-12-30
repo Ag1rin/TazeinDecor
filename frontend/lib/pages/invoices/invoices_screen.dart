@@ -1229,6 +1229,11 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
     String brandName,
     String periodLabel,
   ) async {
+    // Sanitize brand name and date for filename
+    final safeBrandName = brandName.replaceAll(RegExp(r'[^\w\u0600-\u06FF]'), '_');
+    final safeDate = periodLabel.replaceAll(RegExp(r'[^\w\u0600-\u06FF]'), '_');
+    final fileName = 'فاکتور_${safeBrandName}_$safeDate.pdf';
+    
     await showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -1239,13 +1244,27 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
           child: PdfPreview(
             build: (format) => pdfBytes,
             allowPrinting: true,
-            allowSharing: true,
+            allowSharing: false, // Disable default sharing, use custom button
           ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text('بستن'),
+          ),
+          TextButton.icon(
+            onPressed: () async {
+              await Printing.sharePdf(
+                bytes: pdfBytes,
+                filename: fileName,
+              );
+              if (mounted) {
+                Navigator.pop(context);
+                Fluttertoast.showToast(msg: 'PDF به اشتراک گذاشته شد');
+              }
+            },
+            icon: const Icon(Icons.share),
+            label: const Text('اشتراک‌گذاری'),
           ),
         ],
       ),
@@ -1691,9 +1710,14 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
               onPressed: () async {
                 // Share all PDFs
                 for (int i = 0; i < pdfs.length; i++) {
+                  // Sanitize brand name and date for filename
+                  final safeBrandName = brandNames[i].replaceAll(RegExp(r'[^\w\u0600-\u06FF]'), '_');
+                  final safeDate = periodLabel.replaceAll(RegExp(r'[^\w\u0600-\u06FF]'), '_');
+                  final fileName = 'فاکتور_${safeBrandName}_$safeDate.pdf';
+                  
                   await Printing.sharePdf(
                     bytes: pdfs[i],
-                    filename: 'فاکتور_${brandNames[i]}_$periodLabel.pdf',
+                    filename: fileName,
                   );
                   // Small delay between shares
                   await Future.delayed(const Duration(milliseconds: 500));

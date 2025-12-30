@@ -67,13 +67,21 @@ class AggregatedPdfService {
     if (logoPath == null || logoPath.isEmpty) return null;
 
     try {
-      final url = '${AppConfig.baseUrl}/uploads/$logoPath';
+      // Check if it's a full URL (starts with http:// or https://)
+      final url = logoPath.startsWith('http://') || logoPath.startsWith('https://')
+          ? logoPath
+          : '${AppConfig.baseUrl}/uploads/$logoPath';
+      
+      print('🖼️ Loading logo from: $url');
       final response = await http.get(Uri.parse(url));
       if (response.statusCode == 200) {
+        print('✅ Logo loaded successfully (${response.bodyBytes.length} bytes)');
         return response.bodyBytes;
+      } else {
+        print('⚠️ Logo loading failed with status: ${response.statusCode}');
       }
     } catch (e) {
-      print('⚠️ Error loading logo: $e');
+      print('⚠️ Error loading logo from $logoPath: $e');
     }
     return null;
   }
@@ -159,8 +167,20 @@ class AggregatedPdfService {
     try {
       final brandService = BrandService();
       final brand = await brandService.getBrandByName(brandName);
-      if (brand?.thumbnailUrl != null) {
-        brandLogoBytes = await _loadLogoFromUrl(brand!.thumbnailUrl);
+      print('🔍 [SingleBrand] Looking for brand: $brandName');
+      print('   Found brand: ${brand != null}');
+      if (brand != null) {
+        print('   Brand thumbnailUrl: ${brand.thumbnailUrl}');
+      }
+      if (brand?.thumbnailUrl != null && brand!.thumbnailUrl!.isNotEmpty) {
+        print('📥 [SingleBrand] Loading brand thumbnail: ${brand.thumbnailUrl}');
+        brandLogoBytes = await _loadLogoFromUrl(brand.thumbnailUrl);
+        print('   Logo loaded: ${brandLogoBytes != null}');
+        if (brandLogoBytes != null) {
+          print('   Logo size: ${brandLogoBytes.length} bytes');
+        }
+      } else {
+        print('⚠️ [SingleBrand] Brand thumbnailUrl is null or empty');
       }
     } catch (e) {
       print('⚠️ Error loading brand logo: $e');
@@ -255,8 +275,20 @@ class AggregatedPdfService {
     try {
       final brandService = BrandService();
       final brand = await brandService.getBrandByName(brandName);
-      if (brand?.thumbnailUrl != null) {
-        brandLogoBytes = await _loadLogoFromUrl(brand!.thumbnailUrl);
+      print('🔍 [BrandInvoice] Looking for brand: $brandName');
+      print('   Found brand: ${brand != null}');
+      if (brand != null) {
+        print('   Brand thumbnailUrl: ${brand.thumbnailUrl}');
+      }
+      if (brand?.thumbnailUrl != null && brand!.thumbnailUrl!.isNotEmpty) {
+        print('📥 [BrandInvoice] Loading brand thumbnail: ${brand.thumbnailUrl}');
+        brandLogoBytes = await _loadLogoFromUrl(brand.thumbnailUrl);
+        print('   Logo loaded: ${brandLogoBytes != null}');
+        if (brandLogoBytes != null) {
+          print('   Logo size: ${brandLogoBytes.length} bytes');
+        }
+      } else {
+        print('⚠️ [BrandInvoice] Brand thumbnailUrl is null or empty');
       }
     } catch (e) {
       print('⚠️ Error loading brand logo: $e');
@@ -316,59 +348,65 @@ class AggregatedPdfService {
       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
-        // Brand info (right side in RTL)
-        pw.Expanded(
-          child: pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.end,
-            children: [
-              pw.Text(
-                brandName,
-                style: pw.TextStyle(
-                  font: _vazirBold,
-                  fontSize: 24,
-                  color: PdfColors.blue700,
-                ),
-                textDirection: pw.TextDirection.rtl,
-              ),
-              if (company?.mobile != null) ...[
-                pw.SizedBox(height: 4),
-                pw.Text(
-                  'تلفن: ${PersianNumber.toPersian(company!.mobile!)}',
-                  style: pw.TextStyle(font: _vazirRegular, fontSize: 12),
-                  textDirection: pw.TextDirection.rtl,
-                ),
-              ],
-            ],
-          ),
-        ),
-        // Logos (left side in RTL) - Brand logo takes priority, then company logo
+        // Brand logo and name (right side in RTL - first in children)
         pw.Row(
           mainAxisSize: pw.MainAxisSize.min,
           children: [
+            // Brand logo (smaller - one third size)
             if (brandLogoBytes != null)
               pw.Container(
-                width: 80,
-                height: 80,
+                width: 33,
+                height: 33,
                 margin: const pw.EdgeInsets.only(left: 8),
-                child: pw.Image(pw.MemoryImage(brandLogoBytes), fit: pw.BoxFit.contain),
-              )
-            else if (logoBytes != null)
-              pw.Container(
-                width: 80,
-                height: 80,
-                child: pw.Image(pw.MemoryImage(logoBytes), fit: pw.BoxFit.contain),
-              )
-            else
-              pw.Container(
-                width: 80,
-                height: 80,
                 decoration: pw.BoxDecoration(
                   border: pw.Border.all(color: PdfColors.grey300, width: 1),
                   borderRadius: pw.BorderRadius.circular(4),
                 ),
+                child: pw.ClipRRect(
+                  child: pw.Image(pw.MemoryImage(brandLogoBytes), fit: pw.BoxFit.cover),
+                ),
+              )
+            else if (logoBytes != null)
+              pw.Container(
+                width: 33,
+                height: 33,
+                margin: const pw.EdgeInsets.only(left: 8),
+                decoration: pw.BoxDecoration(
+                  border: pw.Border.all(color: PdfColors.grey300, width: 1),
+                  borderRadius: pw.BorderRadius.circular(4),
+                ),
+                child: pw.ClipRRect(
+                  child: pw.Image(pw.MemoryImage(logoBytes), fit: pw.BoxFit.cover),
+                ),
               ),
+            // Brand name
+            pw.Column(
+              mainAxisSize: pw.MainAxisSize.min,
+              crossAxisAlignment: pw.CrossAxisAlignment.end,
+              children: [
+                pw.Text(
+                  brandName,
+                  style: pw.TextStyle(
+                    font: _vazirBold,
+                    fontSize: 24,
+                    color: PdfColors.blue700,
+                  ),
+                  textDirection: pw.TextDirection.rtl,
+                ),
+                if (company?.mobile != null) ...[
+                  pw.SizedBox(height: 4),
+                  pw.Text(
+                    'تلفن: ${PersianNumber.toPersian(company!.mobile!)}',
+                    style: pw.TextStyle(font: _vazirRegular, fontSize: 12),
+                    textDirection: pw.TextDirection.rtl,
+                  ),
+                ],
+              ],
+            ),
           ],
         ),
+        // Empty space on left (in RTL)
+        pw.SizedBox(width: 0),
       ],
     );
   }
@@ -753,61 +791,67 @@ class AggregatedPdfService {
       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
-        // Brand info (right side in RTL)
-        pw.Expanded(
-          child: pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.end,
-            children: [
-              pw.Text(
-                brandName,
-                style: pw.TextStyle(
-                  font: _vazirBold,
-                  fontSize: 24,
-                  color: PdfColors.blue700,
-                ),
-                textDirection: pw.TextDirection.rtl,
-              ),
-              pw.SizedBox(height: 8),
-              pw.Text(
-                'فاکتور خرید',
-                style: pw.TextStyle(
-                  font: _vazirBold,
-                  fontSize: 18,
-                  color: PdfColors.black,
-                ),
-                textDirection: pw.TextDirection.rtl,
-              ),
-            ],
-          ),
-        ),
-        // Logos (left side in RTL) - Brand logo takes priority, then company logo
+        // Brand logo and name (right side in RTL - first in children)
         pw.Row(
           mainAxisSize: pw.MainAxisSize.min,
           children: [
+            // Brand logo (smaller - one third size)
             if (brandLogoBytes != null)
               pw.Container(
-                width: 80,
-                height: 80,
+                width: 33,
+                height: 33,
                 margin: const pw.EdgeInsets.only(left: 8),
-                child: pw.Image(pw.MemoryImage(brandLogoBytes), fit: pw.BoxFit.contain),
-              )
-            else if (logoBytes != null)
-              pw.Container(
-                width: 80,
-                height: 80,
-                child: pw.Image(pw.MemoryImage(logoBytes), fit: pw.BoxFit.contain),
-              )
-            else
-              pw.Container(
-                width: 80,
-                height: 80,
                 decoration: pw.BoxDecoration(
                   border: pw.Border.all(color: PdfColors.grey300, width: 1),
                   borderRadius: pw.BorderRadius.circular(4),
                 ),
+                child: pw.ClipRRect(
+                  child: pw.Image(pw.MemoryImage(brandLogoBytes), fit: pw.BoxFit.cover),
+                ),
+              )
+            else if (logoBytes != null)
+              pw.Container(
+                width: 33,
+                height: 33,
+                margin: const pw.EdgeInsets.only(left: 8),
+                decoration: pw.BoxDecoration(
+                  border: pw.Border.all(color: PdfColors.grey300, width: 1),
+                  borderRadius: pw.BorderRadius.circular(4),
+                ),
+                child: pw.ClipRRect(
+                  child: pw.Image(pw.MemoryImage(logoBytes), fit: pw.BoxFit.cover),
+                ),
               ),
+            // Brand name
+            pw.Column(
+              mainAxisSize: pw.MainAxisSize.min,
+              crossAxisAlignment: pw.CrossAxisAlignment.end,
+              children: [
+                pw.Text(
+                  brandName,
+                  style: pw.TextStyle(
+                    font: _vazirBold,
+                    fontSize: 24,
+                    color: PdfColors.blue700,
+                  ),
+                  textDirection: pw.TextDirection.rtl,
+                ),
+                pw.SizedBox(height: 8),
+                pw.Text(
+                  'فاکتور خرید',
+                  style: pw.TextStyle(
+                    font: _vazirBold,
+                    fontSize: 18,
+                    color: PdfColors.black,
+                  ),
+                  textDirection: pw.TextDirection.rtl,
+                ),
+              ],
+            ),
           ],
         ),
+        // Empty space on left (in RTL)
+        pw.SizedBox(width: 0),
       ],
     );
   }
