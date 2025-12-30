@@ -18,6 +18,7 @@ import '../../services/aggregated_pdf_service.dart';
 import '../../services/company_service.dart';
 import '../../services/return_service.dart';
 import '../../services/product_service.dart';
+import '../../services/brand_service.dart';
 import 'invoice_detail_screen.dart';
 import 'package:printing/printing.dart';
 import 'package:fluttertoast/fluttertoast.dart';
@@ -36,6 +37,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
   final CompanyService _companyService = CompanyService();
   final ReturnService _returnService = ReturnService();
   final ProductService _productService = ProductService();
+  final BrandService _brandService = BrandService();
   String? _selectedStatus;
   JalaliDate? _startDate;
   JalaliDate? _endDate;
@@ -856,8 +858,357 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
     );
 
     if (selectedDate != null && mounted) {
-      await _generateAggregatedPdfsForDate(selectedDate);
+      // Get brands from orders for this date
+      await _showBrandSelectionDialog(selectedDate);
     }
+  }
+
+  /// Show brand selection dialog after date selection
+  Future<void> _showBrandSelectionDialog(JalaliDate selectedDate) async {
+    setState(() {
+      _isGeneratingPdfs = true;
+    });
+
+    try {
+      // Get orders for selected date
+      final selectedDateTime = selectedDate.toDateTime();
+      final startLocal = DateTime(
+        selectedDateTime.year,
+        selectedDateTime.month,
+        selectedDateTime.day,
+        0,
+        0,
+        0,
+        0,
+      );
+      final endLocal = DateTime(
+        selectedDateTime.year,
+        selectedDateTime.month,
+        selectedDateTime.day,
+        23,
+        59,
+        59,
+        999,
+      );
+      const tehranOffset = Duration(hours: 3, minutes: 30);
+      final startDateUtc = startLocal.subtract(tehranOffset);
+      final endDateUtc = endLocal.subtract(tehranOffset);
+      
+      final startDateStr = '${startDateUtc.toIso8601String()}Z';
+      final endDateStr = '${endDateUtc.toIso8601String()}Z';
+
+      final orders = await _orderService.searchInvoices(
+        startDate: startDateStr,
+        endDate: endDateStr,
+        perPage: 1000,
+      );
+
+      if (orders.isEmpty) {
+        if (mounted) {
+          setState(() {
+            _isGeneratingPdfs = false;
+          });
+          Fluttertoast.showToast(
+            msg: 'سفارشی در این تاریخ یافت نشد',
+            toastLength: Toast.LENGTH_LONG,
+          );
+        }
+        return;
+      }
+
+      // Group items by brand
+      final Map<String, List<OrderItemModel>> brandItems = {};
+      final Map<String, int?> brandCompanyIds = {};
+      final Map<String, List<OrderModel>> brandOrders = {};
+
+      for (final order in orders) {
+        for (final item in order.items) {
+          final brand = item.effectiveBrand ?? 'بدون برند';
+
+          if (!brandItems.containsKey(brand)) {
+            brandItems[brand] = [];
+            brandCompanyIds[brand] = order.companyId;
+            brandOrders[brand] = [];
+          }
+
+          brandItems[brand]!.add(item);
+          if (!brandOrders[brand]!.any((o) => o.id == order.id)) {
+            brandOrders[brand]!.add(order);
+          }
+        }
+      }
+
+      setState(() {
+        _isGeneratingPdfs = false;
+      });
+
+      if (brandItems.isEmpty) {
+        if (mounted) {
+          Fluttertoast.showToast(
+            msg: 'برندی در این تاریخ یافت نشد',
+            toastLength: Toast.LENGTH_LONG,
+          );
+        }
+        return;
+      }
+
+      // Show brand selection dialog
+      if (!mounted) return;
+
+      final selectedBrand = await showDialog<String>(
+        context: context,
+        builder: (context) => _buildBrandSelectionDialog(
+          brandItems,
+          selectedDate.formatPersian(),
+        ),
+      );
+
+      if (selectedBrand != null && mounted) {
+        // Generate PDF for selected brand
+        await _generateAggregatedPdfForBrand(
+          selectedBrand,
+          brandItems[selectedBrand]!,
+          brandOrders[selectedBrand] ?? [],
+          brandCompanyIds[selectedBrand],
+          selectedDate,
+        );
+      }
+    } catch (e) {
+      print('❌ Error in brand selection: $e');
+      if (mounted) {
+        setState(() {
+          _isGeneratingPdfs = false;
+        });
+        Fluttertoast.showToast(msg: 'خطا در بارگذاری برندها: $e');
+      }
+    }
+  }
+
+  /// Build brand selection dialog
+  Widget _buildBrandSelectionDialog(
+    Map<String, List<OrderItemModel>> brandItems,
+    String dateLabel,
+  ) {
+    return Directionality(
+      textDirection: ui.TextDirection.rtl,
+      child: AlertDialog(
+        title: Row(
+          children: [
+            const Icon(Icons.business, color: AppColors.primaryBlue),
+            const SizedBox(width: 8),
+            Text('انتخاب برند برای $dateLabel'),
+          ],
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'لطفاً برند مورد نظر را برای تولید فاکتور انتخاب کنید:',
+                style: TextStyle(fontSize: 14, color: Colors.grey),
+              ),
+              const SizedBox(height: 16),
+              Flexible(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: brandItems.length,
+                  itemBuilder: (context, index) {
+                    final entry = brandItems.entries.elementAt(index);
+                    final brand = entry.key;
+                    final items = entry.value;
+                    final itemCount = items.length;
+                    final totalAmount = items.fold<double>(
+                      0,
+                      (sum, item) => sum + item.total,
+                    );
+
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      child: ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: AppColors.primaryBlue.withOpacity(0.1),
+                          child: const Icon(
+                            Icons.category,
+                            color: AppColors.primaryBlue,
+                          ),
+                        ),
+                        title: Text(
+                          brand,
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        subtitle: Text(
+                          '$itemCount محصول - ${PersianNumber.formatPrice(totalAmount)} تومان',
+                          style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                        ),
+                        trailing: const Icon(Icons.chevron_left),
+                        onTap: () => Navigator.pop(context, brand),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('انصراف'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Generate PDF for a specific brand
+  Future<void> _generateAggregatedPdfForBrand(
+    String brandName,
+    List<OrderItemModel> items,
+    List<OrderModel> orders,
+    int? companyId,
+    JalaliDate selectedDate,
+  ) async {
+    setState(() {
+      _isGeneratingPdfs = true;
+    });
+
+    try {
+      final selectedDateTime = selectedDate.toDateTime();
+      final startLocal = DateTime(
+        selectedDateTime.year,
+        selectedDateTime.month,
+        selectedDateTime.day,
+        0,
+        0,
+        0,
+        0,
+      );
+      const tehranOffset = Duration(hours: 3, minutes: 30);
+      final startDateUtc = startLocal.subtract(tehranOffset);
+      final periodLabel = selectedDate.formatPersian();
+
+      // Get company info
+      CompanyModel? company;
+      if (companyId != null) {
+        final companies = await _companyService.getCompanies();
+        company = companies.firstWhere(
+          (c) => c.id == companyId,
+          orElse: () => CompanyModel(
+            id: 0,
+            name: brandName,
+            createdAt: DateTime.now(),
+          ),
+        );
+      }
+
+      // Enrich items with product details
+      final enrichedItems = await Future.wait(
+        items.map((item) async {
+          if (item.product != null) return item;
+
+          // Try to get product details from cache or API
+          if (!_productDetailsCache.containsKey(item.productId)) {
+            try {
+              final productDetails = await _productService.getProductFromSecureAPI(
+                item.productId,
+              );
+              if (productDetails != null) {
+                _productDetailsCache[item.productId] = productDetails;
+              }
+            } catch (e) {
+              print('⚠️ Error fetching product ${item.productId}: $e');
+            }
+          }
+
+          final productDetails = _productDetailsCache[item.productId];
+          if (productDetails != null && item.product == null) {
+            // Create product from details
+            return OrderItemModel(
+              id: item.id,
+              productId: item.productId,
+              quantity: item.quantity,
+              unit: item.unit,
+              price: item.price,
+              total: item.total,
+              variationId: item.variationId,
+              variationPattern: item.variationPattern,
+              product: ProductModel(
+                id: item.productId,
+                wooId: productDetails['woo_id'] ?? item.productId,
+                name: productDetails['name']?.toString() ?? 'محصول',
+                price: (productDetails['price'] ?? 0).toDouble(),
+                stockQuantity: productDetails['stock_quantity'] ?? 0,
+                status: productDetails['status'] ?? 'available',
+                imageUrl: productDetails['image_url']?.toString(),
+                albumCode: productDetails['album_code']?.toString(),
+                designCode: productDetails['design_code']?.toString(),
+                brand: productDetails['brand']?.toString() ?? item.brand,
+              ),
+              brand: item.brand ?? productDetails['brand']?.toString(),
+            );
+          }
+
+          return item;
+        }),
+      );
+
+      // Generate PDF
+      final pdfBytes = await AggregatedPdfService.generateBrandInvoicePdf(
+        brandName: brandName,
+        items: enrichedItems,
+        orders: orders,
+        periodLabel: periodLabel,
+        periodDate: startDateUtc,
+        company: company,
+      );
+
+      // Show PDF preview/share
+      if (mounted) {
+        await _showSinglePdfPreviewDialog(pdfBytes, brandName, periodLabel);
+      }
+    } catch (e) {
+      print('❌ Error generating PDF: $e');
+      if (mounted) {
+        Fluttertoast.showToast(msg: 'خطا در تولید PDF: $e');
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isGeneratingPdfs = false;
+        });
+      }
+    }
+  }
+
+  /// Show single PDF preview dialog
+  Future<void> _showSinglePdfPreviewDialog(
+    Uint8List pdfBytes,
+    String brandName,
+    String periodLabel,
+  ) async {
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('فاکتور $brandName - $periodLabel'),
+        content: SizedBox(
+          width: double.maxFinite,
+          height: 500,
+          child: PdfPreview(
+            build: (format) => pdfBytes,
+            allowPrinting: true,
+            allowSharing: true,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('بستن'),
+          ),
+        ],
+      ),
+    );
   }
 
   /// NEW: Generate aggregated PDFs for selected date

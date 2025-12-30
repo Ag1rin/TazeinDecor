@@ -750,19 +750,32 @@ class _OperatorDashboardState extends State<OperatorDashboard>
                     trailing: inst.notes != null && inst.notes!.isNotEmpty
                         ? const Icon(Icons.note)
                         : null,
-                    onTap: () {
-                      if (inst.notes != null && inst.notes!.isNotEmpty) {
-                        showDialog(
-                          context: context,
-                          builder: (context) => AlertDialog(
-                            title: Text('یادداشت نصب - سفارش ${inst.orderId}'),
-                            content: Text(inst.notes!),
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.pop(context),
-                                child: const Text('بستن'),
-                              ),
-                            ],
+                    onTap: () async {
+                      // Find the order by orderId
+                      OrderModel? order;
+                      try {
+                        order = _orders.firstWhere(
+                          (o) => o.id == inst.orderId,
+                        );
+                      } catch (e) {
+                        // If not found in cached orders, fetch it
+                        order = await _orderService.getOrder(inst.orderId);
+                      }
+                      
+                      if (order != null && mounted) {
+                        // Navigate to invoice detail screen
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => InvoiceDetailScreen(invoice: order!),
+                          ),
+                        );
+                      } else if (mounted) {
+                        // Show error if order not found
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('سفارش ${inst.orderId} یافت نشد'),
+                            backgroundColor: Colors.red,
                           ),
                         );
                       }

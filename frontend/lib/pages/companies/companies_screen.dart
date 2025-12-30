@@ -18,27 +18,19 @@ class CompaniesScreen extends StatefulWidget {
   State<CompaniesScreen> createState() => _CompaniesScreenState();
 }
 
-class _CompaniesScreenState extends State<CompaniesScreen> with SingleTickerProviderStateMixin {
+class _CompaniesScreenState extends State<CompaniesScreen> {
   final CompanyService _companyService = CompanyService();
   final BrandService _brandService = BrandService();
   List<CompanyModel> _companies = [];
   List<BrandModel> _brands = [];
   bool _isLoading = false;
   bool _isLoadingBrands = false;
-  late TabController _tabController;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
     _loadCompanies();
     _loadBrands();
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
   }
 
   Future<void> _loadCompanies() async {
@@ -147,83 +139,53 @@ class _CompaniesScreenState extends State<CompaniesScreen> with SingleTickerProv
 
   @override
   Widget build(BuildContext context) {
+    final isLoading = _isLoading || _isLoadingBrands;
+    final hasData = _companies.isNotEmpty || _brands.isNotEmpty;
+
     return Directionality(
       textDirection: ui.TextDirection.rtl,
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('شرکت‌ها و برندها'),
-          bottom: TabBar(
-            controller: _tabController,
-            tabs: const [
-              Tab(text: 'شرکت‌ها', icon: Icon(Icons.business)),
-              Tab(text: 'برندها', icon: Icon(Icons.label)),
-            ],
-          ),
+          title: const Text('شرکت‌ها'),
           actions: [
-            if (_tabController.index == 0)
-              IconButton(icon: const Icon(Icons.add), onPressed: _addCompany),
-            if (_tabController.index == 1)
-              IconButton(
-                icon: const Icon(Icons.refresh),
-                onPressed: () => _loadBrands(forceRefresh: true),
-                tooltip: 'به‌روزرسانی برندها',
-              ),
+            IconButton(
+              icon: const Icon(Icons.add),
+              onPressed: _addCompany,
+              tooltip: 'افزودن شرکت',
+            ),
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              onPressed: () {
+                _loadCompanies();
+                _loadBrands(forceRefresh: true);
+              },
+              tooltip: 'به‌روزرسانی',
+            ),
           ],
         ),
-        body: TabBarView(
-          controller: _tabController,
-          children: [
-            // Companies Tab
-            _isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : _companies.isEmpty
-                    ? const Center(child: Text('شرکتی یافت نشد'))
-                    : RefreshIndicator(
-                        onRefresh: _loadCompanies,
-                        child: ListView.builder(
-                          padding: const EdgeInsets.all(16),
-                          itemCount: _companies.length,
-                          itemBuilder: (context, index) {
-                            return _buildCompanyCard(_companies[index]);
-                          },
-                        ),
-                      ),
-            // Brands Tab
-            _isLoadingBrands
-                ? const Center(child: CircularProgressIndicator())
-                : _brands.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Text('برندی یافت نشد'),
-                            const SizedBox(height: 16),
-                            ElevatedButton.icon(
-                              onPressed: () => _loadBrands(forceRefresh: true),
-                              icon: const Icon(Icons.refresh),
-                              label: const Text('بارگذاری مجدد'),
-                            ),
-                          ],
-                        ),
-                      )
-                    : RefreshIndicator(
-                        onRefresh: () => _loadBrands(forceRefresh: true),
-                        child: GridView.builder(
-                          padding: const EdgeInsets.all(16),
-                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 2,
-                            crossAxisSpacing: 16,
-                            mainAxisSpacing: 16,
-                            childAspectRatio: 0.8,
-                          ),
-                          itemCount: _brands.length,
-                          itemBuilder: (context, index) {
-                            return _buildBrandCard(_brands[index]);
-                          },
-                        ),
-                      ),
-          ],
-        ),
+        body: isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : !hasData
+                ? const Center(child: Text('شرکتی یا برندی یافت نشد'))
+                : RefreshIndicator(
+                    onRefresh: () async {
+                      await _loadCompanies();
+                      await _loadBrands(forceRefresh: true);
+                    },
+                    child: ListView.builder(
+                      padding: const EdgeInsets.all(16),
+                      itemCount: _companies.length + _brands.length,
+                      itemBuilder: (context, index) {
+                        // First show companies, then brands
+                        if (index < _companies.length) {
+                          return _buildCompanyCard(_companies[index]);
+                        } else {
+                          final brandIndex = index - _companies.length;
+                          return _buildBrandCard(_brands[brandIndex]);
+                        }
+                      },
+                    ),
+                  ),
       ),
     );
   }
@@ -273,66 +235,31 @@ class _CompaniesScreenState extends State<CompaniesScreen> with SingleTickerProv
 
   Widget _buildBrandCard(BrandModel brand) {
     return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Brand Image
-          Expanded(
-            flex: 3,
-            child: ClipRRect(
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-              child: brand.thumbnailUrl != null
-                  ? CachedNetworkImage(
-                      imageUrl: brand.thumbnailUrl!,
-                      fit: BoxFit.cover,
-                      placeholder: (context, url) => Container(
-                        color: Colors.grey[200],
-                        child: const Center(
-                          child: CircularProgressIndicator(),
-                        ),
-                      ),
-                      errorWidget: (context, url, error) => Container(
-                        color: Colors.grey[300],
-                        child: const Icon(
-                          Icons.broken_image,
-                          size: 48,
-                          color: Colors.grey,
-                        ),
-                      ),
-                    )
-                  : Container(
-                      color: Colors.grey[200],
-                      child: const Icon(
-                        Icons.label_outline,
-                        size: 48,
-                        color: Colors.grey,
-                      ),
-                    ),
-            ),
-          ),
-          // Brand Name
-          Expanded(
-            flex: 1,
-            child: Container(
-              padding: const EdgeInsets.all(12),
-              alignment: Alignment.center,
-              child: Text(
-                brand.name,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
+      margin: const EdgeInsets.only(bottom: 12),
+      child: ListTile(
+        leading: brand.thumbnailUrl != null
+            ? ClipOval(
+                child: CachedNetworkImage(
+                  imageUrl: brand.thumbnailUrl!,
+                  width: 56,
+                  height: 56,
+                  fit: BoxFit.cover,
+                  placeholder: (context, url) => const CircleAvatar(
+                    child: CircularProgressIndicator(),
+                  ),
+                  errorWidget: (context, url, error) => const CircleAvatar(
+                    child: Icon(Icons.label),
+                  ),
                 ),
-                textAlign: TextAlign.center,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ),
-        ],
+              )
+            : const CircleAvatar(child: Icon(Icons.label)),
+        title: Text(brand.name),
+        subtitle: const Text('برند'),
+        trailing: IconButton(
+          icon: const Icon(Icons.refresh),
+          onPressed: () => _loadBrands(forceRefresh: true),
+          tooltip: 'به‌روزرسانی برندها',
+        ),
       ),
     );
   }
